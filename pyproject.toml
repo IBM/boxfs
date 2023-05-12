@@ -6,13 +6,25 @@ build-backend = "poetry_dynamic_versioning.backend"
 name = "boxfs"
 dynamic = ["version"]
 
+
 [tool.poetry]
 name = "boxfs"
 version = "0.1-alpha1"
-description = "Box File System"
+description = "Implementation of fsspec for Box file storage"
 authors = ["Thomas Hunter <boxfs.tehunter@gmail.com>"]
 packages = [
     { include = "boxfs", from = "src" }
+]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/IBM/boxfs"
+keywords = ["file-storage", "fsspec", "file-system", "box"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Topic :: Database",
+    "Topic :: Office/Business",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Filesystems",
 ]
 
 [tool.poetry.dependencies]
