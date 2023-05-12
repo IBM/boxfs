@@ -76,7 +76,8 @@ class BoxFileSystem(AbstractFileSystem):
         root_id : Object ID string, optional
             Box ID of folder where file system root is placed, by default None
         root_path : path string, optional
-            Path to Box root folder, relative to token root (e.g. "All Files")  # TODO: Is this correct?
+            Path to Box root folder, relative to token root (e.g. "All Files")  
+            # TODO: Is this correct? Add a test
         
         If only `root_id` is provided, the `root_path` is determined from API calls. If 
         only `root_path` is provided, the `root_id` is determined from API calls.

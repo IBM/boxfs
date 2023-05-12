@@ -234,7 +234,9 @@ class BoxFileSystemMocker:
         if do_mock:
             with pytest.MonkeyPatch.context() as monkeypatch:
                 monkeypatch.setattr(boxsdk.object.file.File, "delete", file_delete)
-                monkeypatch.setattr(boxsdk.object.folder.Folder, "delete", folder_delete)
+                monkeypatch.setattr(
+                    boxsdk.object.folder.Folder, "delete", folder_delete
+                )
                 yield
         else:
             yield
