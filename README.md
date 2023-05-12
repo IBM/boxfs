@@ -45,6 +45,37 @@ fs.cat("Documents/test_file.txt")
 fs.rm("Documents/test_file.txt")
 ```
 
+## Storage Options
+
+The following storage options are accepted by `fsspec` when creating a `BoxFileSystem`
+object:
+
+- oauth: Box app OAuth2 configuration dictionary, e.g. loaded from
+    `JWTAuth.from_settings_file`, by default None
+- client: An already instantiated boxsdk `Client` object
+- client_type: Type of `Client` class to use when connecting to box
+
+If `client` is provided, it is used for handling API calls. Otherwise, the file
+system to instantiate a new client connection, of type `client_type`, using the
+provided `oauth` configuration.
+
+- root_id: Box ID (as `str`) of folder where file system root is placed, by default
+    None
+- root_path: Path (as `str`) to Box root folder, must be relative to user's root
+    (e.g. "All Files"). The client must have access to the application user's root
+    folder (i.e., it cannot be downscoped to a subfolder)
+
+If only `root_id` is provided, the `root_path` is determined from API calls. If 
+only `root_path` is provided, the `root_id` is determined from API calls. If
+neither is provided, the application user's root folder is used.
+
+- path_map: Mapping of paths to object ID strings, used to populate initial lookup
+    cache for quick directory navigation
+- scopes: List of permissions to which the API token should be restricted. If None
+    (default), no restrictions are applied. If scopes are provided, the client
+    connection is (1) downscoped to use only the provided scopes, and
+    (2) restricted to the directory/subdirectories of the root folder.
+
 ## Creating a Box App
 
 Before you can use `boxfs`, you will need a Box application through which you can route

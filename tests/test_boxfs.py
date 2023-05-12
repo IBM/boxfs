@@ -130,7 +130,13 @@ class BoxFileSystemMocker:
                     _type="folder",
                     path_collection=_path_collection,
                 )
-                self.mock_items[_folder_id].append(folder)
+                self.mock_items[_folder_id].append(
+                    boxsdk.object.folder.Folder(
+                        session=None,
+                        object_id=str(self._next_id),
+                        response_object=folder
+                    )
+                )
                 self.folders[str(self._next_id)] = folder
                 _folder_id = str(self._next_id)
                 self._next_id += 1
