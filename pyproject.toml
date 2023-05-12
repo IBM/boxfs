@@ -16,7 +16,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
+python = ">=3.8,<4.0"
 boxsdk = {version = "^3.7", extras = ["jwt"]}
 fsspec = ">=2023.4"
 # universal-pathlib = "^0.0.23"
