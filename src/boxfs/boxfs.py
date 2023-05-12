@@ -115,7 +115,7 @@ class BoxFileSystem(AbstractFileSystem):
     def connect(self, config, client_type):
         self.client: Client = client_type(config)
 
-    def _get_root_id(self, root_id: _ObjectID = None, root_path: _PathLike = None):
+    def _get_root_id(self, root_id: _ObjectId = None, root_path: _PathLike = None):
         """Gets the root folder ID
 
         If root_id is not None, it is returned. Otherwise, if root path is not None, the
@@ -124,7 +124,7 @@ class BoxFileSystem(AbstractFileSystem):
 
         Parameters
         ----------
-        root_id : _ObjectID, optional
+        root_id : _ObjectId, optional
             Root ID if provided, by default None
         root_path : _PathLike, optional
             Root Path if provided, by default None
