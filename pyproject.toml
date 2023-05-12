@@ -25,6 +25,7 @@ classifiers = [
     "Topic :: Office/Business",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Filesystems",
+    "Topic :: Utilities",
 ]
 
 [tool.poetry.dependencies]
