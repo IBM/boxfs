@@ -101,7 +101,8 @@ class BoxFileSystem(AbstractFileSystem):
             self.connect(oauth, client_type)
         else:
             self.client = client.clone()
-        self.set_root_folder(root_id, root_path)
+        self.root_id = self._get_root_id(root_id, root_path)
+        self.root_path = self._get_root_path(self.root_id)
 
         self._original_client = self.client
         self.scopes = scopes
@@ -113,19 +114,33 @@ class BoxFileSystem(AbstractFileSystem):
     def connect(self, config, client_type):
         self.client: Client = client_type(config)
 
-    def set_root_folder(self, root_id=None, root_path=None):
-        if root_id is None and root_path is not None:
-            root_id = self._get_absolute_path_id(root_path)
+    def _get_root_id(self, root_id: _ObjectID = None, root_path: _PathLike = None):
+        """Gets the root folder ID
 
-        if root_id is None:
-            root_id = self.root_id
+        If root_id is not None, it is returned. Otherwise, if root path is not None, the
+        ID of the corresponding folder is determined. If both are None, return the
+        default root id of "0"
 
-        if root_path is None:
-            folder = self.client.folder(root_id).get(fields=["name", "path_collection"])
-            root_path = self._construct_path(folder, relative=False)
+        Parameters
+        ----------
+        root_id : _ObjectID, optional
+            Root ID if provided, by default None
+        root_path : _PathLike, optional
+            Root Path if provided, by default None
+        """
+        if root_id is not None:
+            return root_id
+        else:
+            if root_path is not None:
+                root_id = self._get_absolute_path_id(root_path)
+            else:
+                root_id = self.root_id
 
-        self.root_id = root_id
-        self.root_path = root_path
+        return root_id
+    
+    def _get_root_path(self, root_id):
+        folder = self.client.folder(root_id).get(fields=["name", "path_collection"])
+        return self._construct_path(folder, relative=False)
 
     def downscope_token(self, scopes: Iterable[TokenScope]):
         """Downscope permissions for the underlying client
@@ -148,7 +163,7 @@ class BoxFileSystem(AbstractFileSystem):
         )
         # The root path changes after downscoping, because the "All Files" folder
         # is hidden
-        self.set_root_folder(root_id=self.root_id)
+        self.root_path = self._get_root_path(self.root_id)
 
     def refresh_token(self):
         self._original_client = self._original_client.auth.refresh(
@@ -184,7 +199,16 @@ class BoxFileSystem(AbstractFileSystem):
 
     def _get_absolute_path_id(self, path: str):
         _closest = self.client.folder(self._default_root_id)
-        _closest_path = ""
+
+        try:
+            _closest = _closest.get(fields=self._fields)
+        except BoxAPIException as error:
+            if error.status == 403:
+                raise PermissionError("Could not access user root folder ('All Files')")
+            else:
+                raise
+
+        _closest_path = _closest.name
         path = self._strip_protocol(path)
         try:
             for part in path.split("/"):
