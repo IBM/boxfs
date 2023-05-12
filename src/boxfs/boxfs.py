@@ -1,6 +1,8 @@
 """
 boxfs - A fsspec implementation for Box file storage platform
 """
+from __future__ import annotations
+
 import hashlib
 import logging
 import tempfile
