@@ -1,0 +1,51 @@
+[build-system]
+requires = ["poetry_core>=1.0.0", "poetry-dynamic-versioning"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[project]
+name = "boxfs"
+dynamic = ["version"]
+
+
+[tool.poetry]
+name = "boxfs"
+version = "0.1-alpha1"
+description = "Implementation of fsspec for Box file storage"
+authors = ["Thomas Hunter <boxfs.tehunter@gmail.com>"]
+packages = [
+    { include = "boxfs", from = "src" }
+]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/IBM/boxfs"
+keywords = ["file-storage", "fsspec", "file-system", "box"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Topic :: Database",
+    "Topic :: Office/Business",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Filesystems",
+    "Topic :: Utilities",
+]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4.0"
+boxsdk = {version = "^3.7", extras = ["jwt"]}
+fsspec = ">=2023.4"
+# universal-pathlib = "^0.0.23"
+# TEMP: Temporary fix for boxsdk dependency conflict as of 5/8/2023
+urllib3 = "<2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = { version = "^7.1", python = ">=3.7" }
+
+[tool.poetry.plugins."fsspec.specs"]
+"box" = "boxfs.boxfs:BoxFileSystem"
+
+[tool.pytest.ini_options]
+# To test with API, update the info below and uncomment, or set an environment variable
+# named `PYTEST_ADDOPTS`
+# addopts = "--with_api --api_config=\"<path\\to\\box\\app_config.json>\" --box_root_id <ROOT FOLDER ID>"
+
+[tool.ruff.per-file-ignores]
+"*/__init__.py" = ["F401"]
