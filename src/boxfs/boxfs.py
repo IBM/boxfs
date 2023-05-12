@@ -49,7 +49,6 @@ class BoxFileSystem(AbstractFileSystem):
         self,
         client: Optional[Client] = None,
         oauth: Optional[OAuth2] = None,
-        # access="full_control",
         client_type: Type[Client] = Client,
         root_id: _ObjectId = None,
         root_path: _PathLike = None,
@@ -59,7 +58,7 @@ class BoxFileSystem(AbstractFileSystem):
     ):
         """Instantiate BoxFileSystem
 
-        Creates a BoxFileSystem using the 
+        Creates a BoxFileSystem using the boxsdk interface
 
         Parameters
         ----------
@@ -78,11 +77,13 @@ class BoxFileSystem(AbstractFileSystem):
         root_id : Object ID string, optional
             Box ID of folder where file system root is placed, by default None
         root_path : path string, optional
-            Path to Box root folder, relative to token root (e.g. "All Files")  
-            # TODO: Is this correct? Add a test
+            Path to Box root folder, must be relative to token root (e.g. "All Files").
+            The client must have access to the application user's root folder (i.e., it
+            cannot be downscoped to a subfolder)
         
         If only `root_id` is provided, the `root_path` is determined from API calls. If 
-        only `root_path` is provided, the `root_id` is determined from API calls.
+        only `root_path` is provided, the `root_id` is determined from API calls. If
+        neither is provided, the application user's root folder is used.
             
         path_map : Mapping[path string -> object ID string], optional
             Mapping of paths to object ID strings, used to populate initial lookup cache
