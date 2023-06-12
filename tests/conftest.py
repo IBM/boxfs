@@ -2,7 +2,7 @@ import logging
 import sys
 
 import pytest
-from _utilities import MockedClient  # noqa: F401
+from ._utilities import MockedClient  # noqa: F401
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -71,6 +71,45 @@ def root_path(request, do_mock):  # noqa: F811
     box_root_path = request.config.getoption("box_root_path")
 
     return box_root_path
+
+
+BOX_CODES = {
+    "not_found": {
+        "status": 404,
+        "message": "Not Found",
+        "reason": "invalid_parameter",
+        "error_message": (
+            "Invalid value '{object_id}'. '{_type}' with value '{object_id}' not found"
+        ),
+    }
+}
+
+@pytest.fixture(scope="session")
+def box_error():
+    import boxsdk
+    def _error(code, **kwargs):
+        error_details = BOX_CODES[code]
+        return boxsdk.BoxAPIException(
+            status=error_details["status"],
+            headers=None,
+            code=code,
+            message=error_details["message"],
+            request_id=None,
+            url=None,
+            method=None,
+            context_info={
+                "errors": [
+                    {
+                        "reason": error_details["reason"],
+                        "name": kwargs.get("_type", ""),
+                        "message": error_details["error_message"].format(**kwargs),
+                    }
+                ]
+            },
+            network_response=None,
+        )
+    yield _error
+
 
 
 def pytest_addoption(parser):
