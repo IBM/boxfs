@@ -1,8 +1,8 @@
 # boxfs
 
-Implementation of the [`fsspec`](https://filesystem-spec.readthedocs.io/en/latest/index.html) protocol for [Box](https://www.box.com/overview) content
-management, enabling you to interface with files stored on Box using
-file-system-like navigation.
+Implementation of the [`fsspec`](https://filesystem-spec.readthedocs.io/en/latest/index.html)
+protocol for [Box](https://www.box.com/overview) content management, enabling you to
+interface with files stored on Box using a file-system-like navigation.
 
 ## Installation
 
@@ -11,6 +11,12 @@ command:
 
 ```bash
 pip install boxfs
+```
+
+To use install the optional `upath` dependency, use the following command
+
+```bash
+pip install boxfs[upath]
 ```
 
 ## Example
@@ -43,6 +49,12 @@ with fs.open("Documents/test_file.txt", "wb") as f:
 fs.cat("Documents/test_file.txt")
 # Delete file
 fs.rm("Documents/test_file.txt")
+
+# If you installed with the `upath` extra, you can also use the universal-pathlib UPath
+# class.
+from upath import UPath
+path = UPath("Documents", fs=fs) / "test_file.txt"
+path.read_text()
 ```
 
 ## Storage Options
