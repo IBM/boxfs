@@ -18,6 +18,12 @@ from boxsdk.auth.oauth2 import TokenScope
 from boxsdk.object.item import Item
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 
+try:
+    import boxfs._upath  # noqa: F401
+except ModuleNotFoundError:
+    # Optional dependency not found
+    pass
+
 
 __all__ = ["BoxFileSystem"]
 
@@ -431,7 +437,14 @@ class BoxFile(AbstractBufferedFile):
         size=None,
         **kwargs,
     ):
-        super().__init__(fs, fs._get_relative_path(path), mode, block_size, autocommit=autocommit, **kwargs)
+        super().__init__(
+            fs,
+            fs._get_relative_path(path),
+            mode,
+            block_size,
+            autocommit=autocommit,
+            **kwargs
+        )
         self.exists = False
 
         if self.writable():

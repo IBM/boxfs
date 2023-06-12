@@ -4,7 +4,7 @@ import pytest
 import upath
 
 from .._utilities import BoxFileSystemMocker
-import boxfs._upath
+import boxfs  # noqa: F401
 
 @pytest.mark.mock_only
 def test_box_protocol_registered():
