@@ -443,6 +443,9 @@ class BoxFile(AbstractBufferedFile):
             mode,
             block_size,
             autocommit=autocommit,
+            cache_type=cache_type,
+            cache_options=cache_options,
+            size=size,
             **kwargs
         )
         self.exists = False

@@ -9,7 +9,7 @@ dynamic = ["version"]
 
 [tool.poetry]
 name = "boxfs"
-version = "0.1.2"
+version = "0.2.0"
 description = "Implementation of fsspec for Box file storage"
 authors = ["Thomas Hunter <boxfs.tehunter@gmail.com>"]
 packages = [

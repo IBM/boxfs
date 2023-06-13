@@ -295,8 +295,13 @@ class BoxFileSystemMocker:
             data: IO[bytes] = kwargs["file_stream"]
             file_id = self.object_id
             data.seek(0, 0)
+            data_contents = data.read()
 
-            file = _build_file(self, file_id, data.read(), **kwargs)
+            file = _build_file(self, file_id, data_contents, **kwargs)
+            
+            # Update stored file response object
+            test.file_items[file_id]._response_object = file._response_object
+            test.file_items[file_id].__dict__.update(file._response_object)
 
             return file
 

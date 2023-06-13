@@ -89,8 +89,11 @@ class TestBoxFileSystem(BoxFileSystemMocker):
 
         with write_expectation:
             # Go twice to test upload + update
-            for _ in range(2):
-                a, b = random.randint(0, 1e9), random.randint(0, 1e9)
+            for i in range(2):
+                # Use different ranges for each call to test that the file size updates
+                # correctly
+                _min, _max = i * 1e5, 10**(5 * (i+1)) - 1
+                a, b = random.randint(_min, _max), random.randint(_min, _max)
                 text = f"{a} {b} DONE"
                 with fs.open(path, "wb") as f:
                     f.write(text.encode())
