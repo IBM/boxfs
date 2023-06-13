@@ -18,6 +18,12 @@ from boxsdk.auth.oauth2 import TokenScope
 from boxsdk.object.item import Item
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 
+try:
+    import boxfs._upath  # noqa: F401
+except ModuleNotFoundError:
+    # Optional dependency not found
+    pass
+
 
 __all__ = ["BoxFileSystem"]
 
@@ -249,7 +255,7 @@ class BoxFileSystem(AbstractFileSystem):
         if remaining_path == "":
             return _closest_id
         try:
-            for part in remaining_path.split("/"):
+            for part in remaining_path.lstrip("/").split("/"):
                 error = True
                 items = _closest.get_items(fields=self._fields)
                 for item in items:
@@ -345,12 +351,12 @@ class BoxFileSystem(AbstractFileSystem):
         fs_items = []
         if not detail:
             for item in items:
-                item_path = self._construct_path(item)
+                item_path = self._construct_path(item, relative=True)
                 self.path_map[item_path] = item.id
                 fs_items.append(item_path)
         else:
             for item in items:
-                item_path = self._construct_path(item)
+                item_path = self._construct_path(item, relative=True)
                 self.path_map[item_path] = item.id
                 fs_items.append(
                     {
@@ -421,7 +427,7 @@ class BoxFileSystem(AbstractFileSystem):
 class BoxFile(AbstractBufferedFile):
     def __init__(
         self,
-        fs,
+        fs: BoxFileSystem,
         path,
         mode="rb",
         block_size="default",
@@ -431,8 +437,18 @@ class BoxFile(AbstractBufferedFile):
         size=None,
         **kwargs,
     ):
-        super().__init__(fs, path, mode, block_size, autocommit=autocommit, **kwargs)
-        self.fs: BoxFileSystem
+        super().__init__(
+            fs,
+            fs._get_relative_path(path),
+            mode,
+            block_size,
+            autocommit=autocommit,
+            cache_type=cache_type,
+            cache_options=cache_options,
+            size=size,
+            **kwargs
+        )
+        self.exists = False
 
         if self.writable():
             self.location = None

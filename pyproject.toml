@@ -9,7 +9,7 @@ dynamic = ["version"]
 
 [tool.poetry]
 name = "boxfs"
-version = "0.1.2"
+version = "0.2.0"
 description = "Implementation of fsspec for Box file storage"
 authors = ["Thomas Hunter <boxfs.tehunter@gmail.com>"]
 packages = [
@@ -32,12 +32,13 @@ classifiers = [
 python = ">=3.8,<4.0"
 boxsdk = {version = "^3.7", extras = ["jwt"]}
 fsspec = ">=2023.4"
-# universal-pathlib = "^0.0.23"
-# TEMP: Temporary fix for boxsdk dependency conflict as of 5/8/2023
-urllib3 = "<2"
+universal-pathlib = {version = "^0.0.23", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = { version = "^7.1", python = ">=3.7" }
+
+[tool.poetry.extras]
+upath = ["universal-pathlib"]
 
 [tool.poetry.plugins."fsspec.specs"]
 "box" = "boxfs.boxfs:BoxFileSystem"
