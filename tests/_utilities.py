@@ -269,7 +269,7 @@ class BoxFileSystemMocker:
 
     @pytest.fixture(scope="class")
     def mock_upload(test, do_mock, client, fs, scopes):
-        created_files = []
+        created_files = set()
 
         def upload_stream(self, *args, **kwargs):
             if scopes and TokenScope.ITEM_READWRITE not in scopes:
@@ -340,17 +340,18 @@ class BoxFileSystemMocker:
                 )
                 yield
         else:
-            created_files = []
+            # Modify the upload function to track all uploaded files
             _original_function = boxsdk.object.folder.Folder.upload_stream
 
             def wrap(self, *args, **kwargs):
                 file = _original_function(self, *args, **kwargs)
-                created_files.append(file)
+                created_files.add(file)
                 return file
 
             with pytest.MonkeyPatch.context() as monkeypatch:
                 monkeypatch.setattr(boxsdk.object.folder.Folder, "upload_stream", wrap)
                 yield
+            # Delete all the files that were uploaded
             for file in created_files:
                 try:
                     file.delete()

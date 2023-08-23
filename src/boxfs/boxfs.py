@@ -60,6 +60,7 @@ class BoxFileSystem(AbstractFileSystem):
         root_path: _PathLike = None,
         path_map: Optional[Mapping[_PathLike, _ObjectId]] = None,
         scopes: Optional[Iterable[TokenScope]] = None,
+        cache_paths: bool = True,
         **kwargs,
     ):
         """Instantiate BoxFileSystem
@@ -99,6 +100,9 @@ class BoxFileSystem(AbstractFileSystem):
             (default), no restrictions are applied. If scopes are provided, the client
             connection is (1) downscoped to use only the provided scopes, and
             (2) restricted to the directory/subdirectories of the root folder.
+        cache_paths : bool
+            Whether to cache paths for quicker directory navigation. May lead to
+            unexpected issues when deleting files
         """
         super().__init__(**kwargs)
         if path_map is None:
@@ -117,6 +121,7 @@ class BoxFileSystem(AbstractFileSystem):
             self.downscope_token(self.scopes)
 
         self._cache = {}
+        self.cache_paths = cache_paths
 
     def connect(self, config, client_type):
         self.client: Client = client_type(config)
@@ -260,7 +265,7 @@ class BoxFileSystem(AbstractFileSystem):
                 items = _closest.get_items(fields=self._fields)
                 for item in items:
                     item_path = "/".join((_closest_path, part))
-                    self.path_map[item_path] = item.id
+                    self._add_to_path_map(item_path, item.id)
                     if item.type in ("folder", "file") and item.name == part:
                         _closest = item
                         error = False
@@ -310,14 +315,25 @@ class BoxFileSystem(AbstractFileSystem):
 
         return self.mkdir(path, create_parents=True)
 
+    def _add_to_path_map(self, path, id_):
+        path = self._get_relative_path(path)
+        if self.cache_paths:
+            self.path_map[path] = id_
+
+    def _remove_from_path_map(self, path):
+        path = self._get_relative_path(path)
+        self.path_map.pop(path, None)
+
     def rm_file(self, path, etag=None):
         """Remove a file. Passes `etag` along to Box delete"""
         file_id = self.path_to_file_id(path)
         self.client.file(file_id).delete(etag=etag)
+        self._remove_from_path_map(path)
 
     def rmdir(self, path, recursive: bool = True, etag: str | None = None):
         folder_id = self.path_to_file_id(path)
         self.client.folder(folder_id).delete(etag=etag)
+        self._remove_from_path_map(path)
 
     def ls(self, path, detail=True, refresh=True, **kwargs):
         path = self._strip_protocol(path)
@@ -352,12 +368,12 @@ class BoxFileSystem(AbstractFileSystem):
         if not detail:
             for item in items:
                 item_path = self._construct_path(item, relative=True)
-                self.path_map[item_path] = item.id
+                self._add_to_path_map(item_path, item.id)
                 fs_items.append(item_path)
         else:
             for item in items:
                 item_path = self._construct_path(item, relative=True)
-                self.path_map[item_path] = item.id
+                self._add_to_path_map(item_path, item.id)
                 fs_items.append(
                     {
                         "name": item_path,
