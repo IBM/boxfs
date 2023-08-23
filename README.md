@@ -77,7 +77,7 @@ provided `oauth` configuration.
     (e.g. "All Files"). The client must have access to the application user's root
     folder (i.e., it cannot be downscoped to a subfolder)
 
-If only `root_id` is provided, the `root_path` is determined from API calls. If 
+If only `root_id` is provided, the `root_path` is determined from API calls. If
 only `root_path` is provided, the `root_id` is determined from API calls. If
 neither is provided, the application user's root folder is used.
 

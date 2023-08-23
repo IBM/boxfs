@@ -44,7 +44,13 @@ class TestBoxFileSystem(BoxFileSystemMocker):
     def fs(self, client, client_type, root_id, root_path, mock_folder_get, scopes):
         if client is not None:
             client = client.clone()
-        fs = fsspec.filesystem("box", client=client, root_id=root_id, client_type=client_type, cache_paths=False)
+        fs = fsspec.filesystem(
+            "box",
+            client=client,
+            root_id=root_id,
+            client_type=client_type,
+            cache_paths=False
+        )
 
         if scopes:
             try:
@@ -64,7 +70,6 @@ class TestBoxFileSystem(BoxFileSystemMocker):
                 f.write(text.encode())
             return text
         yield _write
-
 
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
@@ -92,8 +97,8 @@ class TestBoxFileSystem(BoxFileSystemMocker):
         with write_expectation:
             # Go twice to test upload + update
             for i in range(2):
-                # Use different ranges for each call to test that the file size updates
-                # correctly
+                # Use different ranges for each call to test that the file size
+                # updates correctly
                 _min, _max = i * 1e5, 10**(5 * (i+1)) - 1
                 a, b = random.randint(_min, _max), random.randint(_min, _max)
                 text = f"{a} {b} DONE"
@@ -101,7 +106,7 @@ class TestBoxFileSystem(BoxFileSystemMocker):
                     f.write(text.encode())
                 file_contents: bytes = fs.cat(path)
                 assert file_contents.decode() == text
-    
+
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
         "mock_item_delete",
@@ -115,7 +120,6 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             fs.rm(path)
 
             assert not fs.exists(path)
-
 
     @pytest.mark.usefixtures(
         "mock_file_content",

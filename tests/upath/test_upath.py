@@ -6,9 +6,11 @@ import upath
 from .._utilities import BoxFileSystemMocker
 import boxfs  # noqa: F401
 
+
 @pytest.mark.mock_only
 def test_box_protocol_registered():
     assert "box" in upath.registry._registry.known_implementations
+
 
 @pytest.fixture(
     scope="class",
@@ -43,7 +45,7 @@ class TestBoxUPath(BoxFileSystemMocker):
             root_path=root_path,
             scopes=scopes
         )
-    
+
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
         "mock_folder_get",
@@ -60,8 +62,8 @@ class TestBoxUPath(BoxFileSystemMocker):
 
         with file_path.open("wt", encoding="utf-8") as f:
             f.write(text)
-        
+
         with file_path.open("rt", encoding="utf-8") as f:
             read_text = f.read()
-        
+
         assert read_text == text

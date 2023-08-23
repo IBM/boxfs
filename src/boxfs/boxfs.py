@@ -87,11 +87,11 @@ class BoxFileSystem(AbstractFileSystem):
             Path to Box root folder, must be relative to token root (e.g. "All Files").
             The client must have access to the application user's root folder (i.e., it
             cannot be downscoped to a subfolder)
-        
-        If only `root_id` is provided, the `root_path` is determined from API calls. If 
+
+        If only `root_id` is provided, the `root_path` is determined from API calls. If
         only `root_path` is provided, the `root_id` is determined from API calls. If
         neither is provided, the application user's root folder is used.
-            
+
         path_map : Mapping[path string -> object ID string], optional
             Mapping of paths to object ID strings, used to populate initial lookup cache
             for quick directory navigation
@@ -151,7 +151,7 @@ class BoxFileSystem(AbstractFileSystem):
                 root_id = self.root_id
 
         return root_id
-    
+
     def _get_root_path(self, root_id):
         folder = self.client.folder(root_id).get(fields=["name", "path_collection"])
         return self._construct_path(folder, relative=False)

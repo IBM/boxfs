@@ -40,6 +40,7 @@ def client(do_mock, request, logger):
 
         yield client
 
+
 @pytest.fixture(scope="module")
 def client_type():
     import boxsdk
@@ -92,9 +93,11 @@ BOX_CODES = {
     }
 }
 
+
 @pytest.fixture(scope="session")
 def box_error():
     import boxsdk
+
     def _error(code, **kwargs):
         error_details = BOX_CODES[code]
         return boxsdk.BoxAPIException(
@@ -117,7 +120,6 @@ def box_error():
             network_response=None,
         )
     yield _error
-
 
 
 def pytest_addoption(parser):

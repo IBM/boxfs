@@ -23,6 +23,7 @@ USER_ROOT = {
     "name": "All Files",
 }
 
+
 def ItemJSON(
     name,
     id,
@@ -223,7 +224,7 @@ class BoxFileSystemMocker:
                 yield
         else:
             yield
-    
+
     @pytest.fixture(scope="class")
     def mock_item_delete(test, do_mock, box_error):
         def file_delete(self, *args, **kwargs):
@@ -266,7 +267,6 @@ class BoxFileSystemMocker:
         else:
             yield
 
-
     @pytest.fixture(scope="class")
     def mock_upload(test, do_mock, client, fs, scopes):
         created_files = set()
@@ -298,7 +298,7 @@ class BoxFileSystemMocker:
             data_contents = data.read()
 
             file = _build_file(self, file_id, data_contents, **kwargs)
-            
+
             # Update stored file response object
             test.file_items[file_id]._response_object = file._response_object
             test.file_items[file_id].__dict__.update(file._response_object)
