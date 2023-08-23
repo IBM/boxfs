@@ -13,7 +13,7 @@ from typing import (
     Type
 )
 
-from boxsdk import BoxAPIException, Client, OAuth2
+from boxsdk import BoxAPIException, Client, OAuth2, JWTAuth
 from boxsdk.auth.oauth2 import TokenScope
 from boxsdk.object.item import Item
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
@@ -54,7 +54,7 @@ class BoxFileSystem(AbstractFileSystem):
     def __init__(
         self,
         client: Optional[Client] = None,
-        oauth: Optional[OAuth2] = None,
+        oauth: Optional[OAuth2 | _PathLike] = None,
         client_type: Type[Client] = Client,
         root_id: _ObjectId = None,
         root_path: _PathLike = None,
@@ -69,9 +69,9 @@ class BoxFileSystem(AbstractFileSystem):
 
         Parameters
         ----------
-        oauth : OAuth2, optional
-            Box app OAuth2 configuration, e.g. loaded from `JWTAuth.from_settings_file`,
-            by default None
+        oauth : OAuth2 or str, optional
+            Box app OAuth2 configuration or path to configuration file, which is
+            passed to `JWTAuth.from_settings_file`, by default None
         client : Client, optional
             Instantiated boxsdk client
         client_type : Type[Client]
@@ -109,6 +109,8 @@ class BoxFileSystem(AbstractFileSystem):
             path_map = {}
         self.path_map = path_map
         if client is None:
+            if isinstance(oauth, str):
+                oauth = JWTAuth.from_settings_file(oauth)
             self.connect(oauth, client_type)
         else:
             self.client = client.clone()

@@ -31,11 +31,19 @@ def client(do_mock, request, logger):
     else:
         logger.info("running real client")
         api_config = request.config.getoption("api_config")
-        config = JWTAuth.from_settings_file(api_config)
+        if api_config is not None:
+            config = JWTAuth.from_settings_file(api_config)
 
-        client = boxsdk.LoggingClient(config)
+            client = boxsdk.LoggingClient(config)
+        else:
+            client = None
 
         yield client
+
+@pytest.fixture(scope="module")
+def client_type():
+    import boxsdk
+    return boxsdk.LoggingClient
 
 
 @pytest.fixture(

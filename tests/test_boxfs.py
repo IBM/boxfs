@@ -41,8 +41,10 @@ def write_expectation(scopes, request):
 
 class TestBoxFileSystem(BoxFileSystemMocker):
     @pytest.fixture(scope="class")
-    def fs(self, client, root_id, root_path, mock_folder_get, scopes):
-        fs = fsspec.filesystem("box", client=client.clone(), root_id=root_id)
+    def fs(self, client, client_type, root_id, root_path, mock_folder_get, scopes):
+        if client is not None:
+            client = client.clone()
+        fs = fsspec.filesystem("box", client=client, root_id=root_id, client_type=client_type, cache_paths=False)
 
         if scopes:
             try:

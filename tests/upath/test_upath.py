@@ -23,6 +23,7 @@ class TestBoxUPath(BoxFileSystemMocker):
     def test_path(
         self,
         client,
+        client_type,
         root_id,
         root_path,
         scopes,
@@ -31,6 +32,9 @@ class TestBoxUPath(BoxFileSystemMocker):
     ):
         if root_id is None:
             root_id = "0"
+        if client is None:
+            import fsspec
+            client = fsspec.filesystem("box", client_type=client_type).client
         client.folder(root_id).create_subfolder("Test UPath Folder")
         yield upath.UPath(
             "box:///Test UPath Folder",
