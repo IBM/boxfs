@@ -13,7 +13,7 @@ from typing import (
     Type
 )
 
-from boxsdk import BoxAPIException, Client, OAuth2
+from boxsdk import BoxAPIException, Client, OAuth2, JWTAuth
 from boxsdk.auth.oauth2 import TokenScope
 from boxsdk.object.item import Item
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
@@ -54,12 +54,13 @@ class BoxFileSystem(AbstractFileSystem):
     def __init__(
         self,
         client: Optional[Client] = None,
-        oauth: Optional[OAuth2] = None,
+        oauth: Optional[OAuth2 | _PathLike] = None,
         client_type: Type[Client] = Client,
         root_id: _ObjectId = None,
         root_path: _PathLike = None,
         path_map: Optional[Mapping[_PathLike, _ObjectId]] = None,
         scopes: Optional[Iterable[TokenScope]] = None,
+        cache_paths: bool = True,
         **kwargs,
     ):
         """Instantiate BoxFileSystem
@@ -68,9 +69,9 @@ class BoxFileSystem(AbstractFileSystem):
 
         Parameters
         ----------
-        oauth : OAuth2, optional
-            Box app OAuth2 configuration, e.g. loaded from `JWTAuth.from_settings_file`,
-            by default None
+        oauth : OAuth2 or str, optional
+            Box app OAuth2 configuration or path to configuration file, which is
+            passed to `JWTAuth.from_settings_file`, by default None
         client : Client, optional
             Instantiated boxsdk client
         client_type : Type[Client]
@@ -86,11 +87,11 @@ class BoxFileSystem(AbstractFileSystem):
             Path to Box root folder, must be relative to token root (e.g. "All Files").
             The client must have access to the application user's root folder (i.e., it
             cannot be downscoped to a subfolder)
-        
-        If only `root_id` is provided, the `root_path` is determined from API calls. If 
+
+        If only `root_id` is provided, the `root_path` is determined from API calls. If
         only `root_path` is provided, the `root_id` is determined from API calls. If
         neither is provided, the application user's root folder is used.
-            
+
         path_map : Mapping[path string -> object ID string], optional
             Mapping of paths to object ID strings, used to populate initial lookup cache
             for quick directory navigation
@@ -99,12 +100,17 @@ class BoxFileSystem(AbstractFileSystem):
             (default), no restrictions are applied. If scopes are provided, the client
             connection is (1) downscoped to use only the provided scopes, and
             (2) restricted to the directory/subdirectories of the root folder.
+        cache_paths : bool
+            Whether to cache paths for quicker directory navigation. May lead to
+            unexpected issues when deleting files
         """
         super().__init__(**kwargs)
         if path_map is None:
             path_map = {}
         self.path_map = path_map
         if client is None:
+            if isinstance(oauth, str):
+                oauth = JWTAuth.from_settings_file(oauth)
             self.connect(oauth, client_type)
         else:
             self.client = client.clone()
@@ -117,6 +123,7 @@ class BoxFileSystem(AbstractFileSystem):
             self.downscope_token(self.scopes)
 
         self._cache = {}
+        self.cache_paths = cache_paths
 
     def connect(self, config, client_type):
         self.client: Client = client_type(config)
@@ -144,7 +151,7 @@ class BoxFileSystem(AbstractFileSystem):
                 root_id = self.root_id
 
         return root_id
-    
+
     def _get_root_path(self, root_id):
         folder = self.client.folder(root_id).get(fields=["name", "path_collection"])
         return self._construct_path(folder, relative=False)
@@ -260,7 +267,7 @@ class BoxFileSystem(AbstractFileSystem):
                 items = _closest.get_items(fields=self._fields)
                 for item in items:
                     item_path = "/".join((_closest_path, part))
-                    self.path_map[item_path] = item.id
+                    self._add_to_path_map(item_path, item.id)
                     if item.type in ("folder", "file") and item.name == part:
                         _closest = item
                         error = False
@@ -310,14 +317,25 @@ class BoxFileSystem(AbstractFileSystem):
 
         return self.mkdir(path, create_parents=True)
 
+    def _add_to_path_map(self, path, id_):
+        path = self._get_relative_path(path)
+        if self.cache_paths:
+            self.path_map[path] = id_
+
+    def _remove_from_path_map(self, path):
+        path = self._get_relative_path(path)
+        self.path_map.pop(path, None)
+
     def rm_file(self, path, etag=None):
         """Remove a file. Passes `etag` along to Box delete"""
         file_id = self.path_to_file_id(path)
         self.client.file(file_id).delete(etag=etag)
+        self._remove_from_path_map(path)
 
     def rmdir(self, path, recursive: bool = True, etag: str | None = None):
         folder_id = self.path_to_file_id(path)
         self.client.folder(folder_id).delete(etag=etag)
+        self._remove_from_path_map(path)
 
     def ls(self, path, detail=True, refresh=True, **kwargs):
         path = self._strip_protocol(path)
@@ -352,12 +370,12 @@ class BoxFileSystem(AbstractFileSystem):
         if not detail:
             for item in items:
                 item_path = self._construct_path(item, relative=True)
-                self.path_map[item_path] = item.id
+                self._add_to_path_map(item_path, item.id)
                 fs_items.append(item_path)
         else:
             for item in items:
                 item_path = self._construct_path(item, relative=True)
-                self.path_map[item_path] = item.id
+                self._add_to_path_map(item_path, item.id)
                 fs_items.append(
                     {
                         "name": item_path,

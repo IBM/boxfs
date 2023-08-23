@@ -23,6 +23,7 @@ USER_ROOT = {
     "name": "All Files",
 }
 
+
 def ItemJSON(
     name,
     id,
@@ -223,7 +224,7 @@ class BoxFileSystemMocker:
                 yield
         else:
             yield
-    
+
     @pytest.fixture(scope="class")
     def mock_item_delete(test, do_mock, box_error):
         def file_delete(self, *args, **kwargs):
@@ -266,10 +267,9 @@ class BoxFileSystemMocker:
         else:
             yield
 
-
     @pytest.fixture(scope="class")
     def mock_upload(test, do_mock, client, fs, scopes):
-        created_files = []
+        created_files = set()
 
         def upload_stream(self, *args, **kwargs):
             if scopes and TokenScope.ITEM_READWRITE not in scopes:
@@ -298,7 +298,7 @@ class BoxFileSystemMocker:
             data_contents = data.read()
 
             file = _build_file(self, file_id, data_contents, **kwargs)
-            
+
             # Update stored file response object
             test.file_items[file_id]._response_object = file._response_object
             test.file_items[file_id].__dict__.update(file._response_object)
@@ -340,17 +340,18 @@ class BoxFileSystemMocker:
                 )
                 yield
         else:
-            created_files = []
+            # Modify the upload function to track all uploaded files
             _original_function = boxsdk.object.folder.Folder.upload_stream
 
             def wrap(self, *args, **kwargs):
                 file = _original_function(self, *args, **kwargs)
-                created_files.append(file)
+                created_files.add(file)
                 return file
 
             with pytest.MonkeyPatch.context() as monkeypatch:
                 monkeypatch.setattr(boxsdk.object.folder.Folder, "upload_stream", wrap)
                 yield
+            # Delete all the files that were uploaded
             for file in created_files:
                 try:
                     file.delete()
