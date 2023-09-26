@@ -166,3 +166,19 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             assert any(item["name"] == "Subfolder 2" for item in items)
             items2 = fs.ls("Subfolder 2", refresh=True)
             assert any(item["name"] == "Subfolder 2/Subsubfolder" for item in items2)
+
+    @pytest.mark.usefixtures(
+        "mock_folder_get_items",
+        "mock_create_subfolder",
+        "mock_folder_get",
+        "mock_file_get",
+    )
+    def test_box_info(self, fs, write_expectation, write_file):
+        path = "file_info.txt"
+        with write_expectation:
+            write_file(path)
+            info = fs.info(path)
+
+            assert info['name'].endswith(path)
+            assert info['size'] > 0
+            assert info['type'] == 'file'
