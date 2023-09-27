@@ -82,7 +82,8 @@ class TestBoxUPath(BoxFileSystemMocker):
         file_path.mkdir(parents=True, exist_ok=True)
         assert file_path.exists()
 
-        file_path_backslash._sub_path((test_path / "Subfolder/Inner Folder/test.txt").__fspath__())
+        with does_not_raise():
+            file_path_backslash._sub_path((test_path / "Subfolder/Inner Folder/test.txt").__fspath__())
         assert file_path.is_dir()
 
         with does_not_raise():
