@@ -1,3 +1,4 @@
+from contextlib import nullcontext as does_not_raise
 import random
 
 import pytest
@@ -67,3 +68,25 @@ class TestBoxUPath(BoxFileSystemMocker):
             read_text = f.read()
 
         assert read_text == text
+
+    @pytest.mark.usefixtures(
+        "mock_folder_get_items",
+        "mock_folder_get",
+        "mock_file_get",
+        "mock_create_subfolder",
+    )
+    def test_backslashes(self, test_path):
+        # test_path.mkdir()
+        file_path = test_path / "Subfolder/Inner Folder"
+        file_path_backslash = test_path / r"Subfolder\Inner Folder"
+        file_path.mkdir(parents=True, exist_ok=True)
+        assert file_path.exists()
+
+        file_path_backslash._sub_path((test_path / "Subfolder/Inner Folder/test.txt").__fspath__())
+        assert file_path.is_dir()
+
+        with does_not_raise():
+            items = set(file_path.iterdir())
+            items_backslash = set(file_path_backslash.iterdir())
+
+            assert items == items_backslash
