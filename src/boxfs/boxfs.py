@@ -357,6 +357,7 @@ class BoxFileSystem(AbstractFileSystem):
                     self.refresh()
                     return self.ls(path, detail=detail)
 
+                # Otherwise, client.folder(object_id) failed, so it's possibly a file
                 _type = "file"
 
         if _type == "file":
