@@ -62,7 +62,15 @@ class TestBoxFileSystem(BoxFileSystemMocker):
         yield fs
     
     @pytest.fixture(scope="class")
-    def fs_caching(self, client, client_type, root_id, root_path, mock_folder_get, scopes):
+    def fs_caching(
+        self,
+        client,
+        client_type,
+        root_id,
+        root_path,
+        mock_folder_get, 
+        scopes
+    ):
         if client is not None:
             client = client.clone()
         fs = fsspec.filesystem(
@@ -207,7 +215,10 @@ class TestBoxFileSystem(BoxFileSystemMocker):
                 f.write(b"abc")
 
             def count_calls():
-                return call_counter["boxsdk.object.folder.Folder.get_items"] + call_counter["boxsdk.object.file.File.get"]
+                return (
+                    call_counter["boxsdk.object.folder.Folder.get_items"]
+                    + call_counter["boxsdk.object.file.File.get"]
+                )
 
             fs_caching.ls("", detail=True, refresh=True)
             calls_to_get_file = count_calls()

@@ -369,7 +369,9 @@ class BoxFileSystem(AbstractFileSystem):
         if refresh or items is None:
             try:
                 # _object = self.client.folder(object_id).get()
-                items = list(self.client.folder(object_id).get_items(fields=self._fields))
+                items = list(
+                    self.client.folder(object_id).get_items(fields=self._fields)
+                )
             except BoxAPIException as error:
                 if error.status == 401:
                     self.refresh()
