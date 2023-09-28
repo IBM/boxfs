@@ -206,26 +206,6 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             with fs_caching.open(path2, "wb") as f:
                 f.write(b"abc")
 
-            # def wrapper(*args, **kwargs):
-            #     boxsdk.object.folder.Folder.get_items(*args, **kwargs)
-            #     pass
-
-            # import boxsdk.object.folder, boxsdk.object.file
-            # spy_folder = mocker.patch.object(
-            #     boxsdk.object.folder.Folder,
-            #     "get_items",
-            #     spec=boxsdk.object.folder.Folder,
-            #     side_effect=wrapper
-            # )
-            # spy_file = mocker.patch.object(
-            #     boxsdk.object.file.File,
-            #     "get",
-            #     spec=boxsdk.object.file.File,
-            #     side_effect=wrapper
-            # )
-            # spy_folder = mocker.spy(boxsdk.object.folder.Folder, "get_items")
-            # spy_file = mocker.spy(boxsdk.object.file.File, "get")
-
             def count_calls():
                 return call_counter["boxsdk.object.folder.Folder.get_items"] + call_counter["boxsdk.object.file.File.get"]
 
