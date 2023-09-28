@@ -380,19 +380,15 @@ class BoxFileSystem(AbstractFileSystem):
         if items is None:
             # item is a file, not a folder
             items = [self.client.file(object_id).get(fields=self._fields)]
-        if not _dircached:
-            self.dircache[cache_path] = items
 
-        fs_items = []
-        if not detail:
-            for item in items:
-                item_path = self._construct_path(item, relative=True)
-                self._add_to_path_map(item_path, item)
-                fs_items.append(item_path)
+        if _dircached:
+            fsspec_items = items
         else:
+            # Need to convert Box API response to fsspec response dictionary
+            fsspec_items = []
             for item in items:
                 item_path = self._construct_path(item, relative=True)
-                fs_items.append(
+                fsspec_items.append(
                     {
                         "name": item_path,
                         "size": item.size,
@@ -404,7 +400,12 @@ class BoxFileSystem(AbstractFileSystem):
                 )
                 self._add_to_path_map(item_path, item)
 
-        return fs_items
+            self.dircache[cache_path] = fsspec_items
+
+        if not detail:
+            return [item["name"] for item in fsspec_items]
+        else:
+            return fsspec_items
 
     def cp_file(self, path1, path2, **kwargs):
         src_id = self.path_to_file_id(path1)
