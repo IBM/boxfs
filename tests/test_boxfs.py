@@ -60,6 +60,28 @@ class TestBoxFileSystem(BoxFileSystemMocker):
                 pass
 
         yield fs
+    
+    @pytest.fixture(scope="class")
+    def fs_caching(self, client, client_type, root_id, root_path, mock_folder_get, scopes):
+        if client is not None:
+            client = client.clone()
+        fs = fsspec.filesystem(
+            "box",
+            client=client,
+            root_id=root_id,
+            client_type=client_type,
+            cache_paths=True
+        )
+
+        if scopes:
+            try:
+                fs.downscope_token(scopes=scopes)
+            except AttributeError:
+                # Fails during mock because there's auth is None
+                pass
+
+        yield fs
+
 
     @pytest.fixture(scope="class")
     def write_file(self, fs, mock_upload, mock_folder_get, mock_folder_get_items):
@@ -173,20 +195,36 @@ class TestBoxFileSystem(BoxFileSystemMocker):
         "mock_folder_get",
         "mock_upload",
     )
-    def test_box_caching(self, fs, write_expectation, mocker):
+    def test_box_caching(self, fs_caching, write_expectation, mocker):
         """File writes and reads correctly"""
         path = "caching.txt"
+        path2 = "caching2.txt"
 
         with write_expectation:
-            with fs.open(path, "wb") as f:
+            with fs_caching.open(path, "wb") as f:
+                f.write(b"abc")
+            with fs_caching.open(path2, "wb") as f:
                 f.write(b"abc")
 
-            import boxsdk.object.file
-            spy = mocker.spy(boxsdk.object.file.File, "get")
+            import boxsdk.object.folder, boxsdk.object.file
+            spy_folder = mocker.spy(boxsdk.object.folder.Folder, "get_items")
+            spy_file = mocker.spy(boxsdk.object.file.File, "get")
 
-            fs.ls("", detail=True, refresh=True)
-            calls_to_get_file = spy.call_count
+            def count_calls():
+                return spy_folder.call_count + spy_file.call_count
+
+            fs_caching.ls("", detail=True, refresh=True)
+            calls_to_get_file = count_calls()
             
             # Should already be cached from the parent ls
-            fs.ls(path, detail=True, refresh=False)
-            assert spy.call_count == calls_to_get_file
+            fs_caching.ls(path, detail=True, refresh=False)
+            assert calls_to_get_file == count_calls()
+
+            # Should already be cached from the parent ls
+            fs_caching.ls(path2, detail=True, refresh=False)
+            assert calls_to_get_file == count_calls()
+
+            # Should already be cached from the parent ls
+            fs_caching.ls(path, detail=True, refresh=True)
+            assert calls_to_get_file < count_calls()
+
