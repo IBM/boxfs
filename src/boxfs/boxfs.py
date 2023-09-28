@@ -132,6 +132,10 @@ class BoxFileSystem(AbstractFileSystem):
         self._cache = {}
         self.cache_paths = cache_paths
 
+        for option in self.default_options:
+            if option in kwargs:
+                self.default_options[option] = kwargs[option]
+
     def connect(self, config, client_type):
         self.client: Client = client_type(config)
 
