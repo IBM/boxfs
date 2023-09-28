@@ -166,3 +166,27 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             assert any(item["name"] == "Subfolder 2" for item in items)
             items2 = fs.ls("Subfolder 2", refresh=True)
             assert any(item["name"] == "Subfolder 2/Subsubfolder" for item in items2)
+
+    @pytest.mark.usefixtures(
+        "mock_folder_get_items",
+        "mock_file_get",
+        "mock_folder_get",
+        "mock_upload",
+    )
+    def test_box_caching(self, fs, write_expectation, mocker):
+        """File writes and reads correctly"""
+        path = "caching.txt"
+
+        with write_expectation:
+            with fs.open(path, "wb") as f:
+                f.write(b"abc")
+
+            import boxsdk.object.file
+            spy = mocker.spy(boxsdk.object.file.File, "get")
+
+            fs.ls("", detail=True, refresh=True)
+            calls_to_get_file = spy.call_count
+            
+            # Should already be cached from the parent ls
+            fs.ls(path, detail=True, refresh=False)
+            assert spy.call_count == calls_to_get_file

@@ -36,6 +36,7 @@ universal-pathlib = {version = "^0.0.23", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = { version = "^7.1", python = ">=3.7" }
+pytest-mock = { version = "^3.11" }
 
 [tool.poetry.extras]
 upath = ["universal-pathlib"]
