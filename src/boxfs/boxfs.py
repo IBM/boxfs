@@ -266,7 +266,7 @@ class BoxFileSystem(AbstractFileSystem):
                 error = True
                 items = _closest.get_items(fields=self._fields)
                 for item in items:
-                    item_path = "/".join((_closest_path, part))
+                    item_path = "/".join((_closest_path, item.name))
                     self._add_to_path_map(item_path, item.id)
                     if item.type in ("folder", "file") and item.name == part:
                         _closest = item
@@ -357,6 +357,7 @@ class BoxFileSystem(AbstractFileSystem):
                     self.refresh()
                     return self.ls(path, detail=detail)
 
+                # Otherwise, client.folder(object_id) failed, so it's possibly a file
                 _type = "file"
 
         if _type == "file":
