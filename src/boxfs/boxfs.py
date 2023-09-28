@@ -3,6 +3,7 @@ boxfs - A fsspec implementation for Box file storage platform
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import tempfile
@@ -12,6 +13,7 @@ from typing import (
     Optional,
     Type
 )
+import warnings
 
 from boxsdk import BoxAPIException, Client, OAuth2, JWTAuth
 from boxsdk.auth.oauth2 import TokenScope
@@ -31,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 _PathLike = str
 _ObjectId = str
+_Default = object()
 
 FS_TYPES = {
     "file": "file",
@@ -43,6 +46,10 @@ class BoxFileSystem(AbstractFileSystem):
     root_marker = ""
     root_id = "0"
     _default_root_id = "0"
+    
+    default_options = {
+        "refresh": True
+    }
 
     # fmt: off
     _fields = [
@@ -92,8 +99,8 @@ class BoxFileSystem(AbstractFileSystem):
         only `root_path` is provided, the `root_id` is determined from API calls. If
         neither is provided, the application user's root folder is used.
 
-        path_map : Mapping[path string -> object ID string], optional
-            Mapping of paths to object ID strings, used to populate initial lookup cache
+        path_map : Mapping[path string -> object dict], optional
+            Mapping of paths to object dicts, used to populate initial lookup cache
             for quick directory navigation
         scopes : Iterable[TokenScope], optional
             List of permissions to which the API token should be restricted. If None
@@ -206,7 +213,7 @@ class BoxFileSystem(AbstractFileSystem):
         if path == self.root_marker:
             return self.root_id
         if path in self.path_map:
-            return self.path_map[path]
+            return self.path_map[path].id
 
         parent = self._parent(path)
         return self.seek_closest_known_path(parent)
@@ -253,7 +260,7 @@ class BoxFileSystem(AbstractFileSystem):
         path = self._strip_protocol(path)
 
         if path in self.path_map:
-            return self.path_map[path]
+            return self.path_map[path].id
 
         _closest_id = self.seek_closest_known_path(path)
         _closest = self.client.folder(_closest_id)
@@ -267,7 +274,9 @@ class BoxFileSystem(AbstractFileSystem):
                 items = _closest.get_items(fields=self._fields)
                 for item in items:
                     item_path = "/".join((_closest_path, part))
-                    self._add_to_path_map(item_path, item.id)
+                    # item_details = self._create_item_details(item)
+                    # assert item_path == item_details.get("name")
+                    self._add_to_path_map(item_path, item)
                     if item.type in ("folder", "file") and item.name == part:
                         _closest = item
                         error = False
@@ -317,10 +326,10 @@ class BoxFileSystem(AbstractFileSystem):
 
         return self.mkdir(path, create_parents=True)
 
-    def _add_to_path_map(self, path, id_):
+    def _add_to_path_map(self, path, item):
         path = self._get_relative_path(path)
         if self.cache_paths:
-            self.path_map[path] = id_
+            self.path_map[path] = item
 
     def _remove_from_path_map(self, path):
         path = self._get_relative_path(path)
@@ -337,45 +346,48 @@ class BoxFileSystem(AbstractFileSystem):
         self.client.folder(folder_id).delete(etag=etag)
         self._remove_from_path_map(path)
 
-    def ls(self, path, detail=True, refresh=True, **kwargs):
+    def ls(self, path, detail=True, refresh=_Default, **kwargs):
+        if refresh is _Default:
+            refresh = self.default_options["refresh"]
         path = self._strip_protocol(path)
 
         object_id = self.path_to_file_id(path)
         cache_path = path.rstrip("/")
+        items = None
+        _dircached = False
 
         if not refresh:
-            items = self._ls_from_cache(cache_path)
-            _type = "folder"
-
-        if refresh or not items:
             try:
-                _object = self.client.folder(object_id).get()
-                _type = _object.type
-                items = self.client.folder(object_id).get_items(fields=self._fields)
+                items = self._ls_from_cache(cache_path)
+                _dircached = items is not None
+            except FileNotFoundError:
+                # Not in cache, so try to retrieve normally
+                pass
+
+        if refresh or items is None:
+            try:
+                # _object = self.client.folder(object_id).get()
+                items = list(self.client.folder(object_id).get_items(fields=self._fields))
             except BoxAPIException as error:
                 if error.status == 401:
                     self.refresh()
                     return self.ls(path, detail=detail)
 
-                _type = "file"
-
-        if _type == "file":
+        if items is None:
             # item is a file, not a folder
             items = [self.client.file(object_id).get(fields=self._fields)]
-        else:
-            items = list(items)
+        if not _dircached:
             self.dircache[cache_path] = items
 
         fs_items = []
         if not detail:
             for item in items:
                 item_path = self._construct_path(item, relative=True)
-                self._add_to_path_map(item_path, item.id)
+                self._add_to_path_map(item_path, item)
                 fs_items.append(item_path)
         else:
             for item in items:
                 item_path = self._construct_path(item, relative=True)
-                self._add_to_path_map(item_path, item.id)
                 fs_items.append(
                     {
                         "name": item_path,
@@ -386,6 +398,7 @@ class BoxFileSystem(AbstractFileSystem):
                         "created_at": item.created_at,
                     }
                 )
+                self._add_to_path_map(item_path, item)
 
         return fs_items
 
@@ -440,6 +453,19 @@ class BoxFileSystem(AbstractFileSystem):
 
     def _open(self, *args, **kwargs):
         return BoxFile(self, *args, **kwargs)
+    
+    @contextlib.contextmanager
+    def option_context(self, *args, **kwargs):
+        original_kwargs = {}
+        for kw, new_value in kwargs.items():
+            if kw not in self.default_options:
+                warnings.warn(f"No option for context option `{kw}`")
+                continue
+            original_kwargs[kw] = self.default_options[kw]
+            self.default_options[kw] = new_value
+        yield
+        for kw, old_value in original_kwargs.items():
+            self.default_options[kw] = old_value
 
 
 class BoxFile(AbstractBufferedFile):
