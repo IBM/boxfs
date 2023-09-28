@@ -286,6 +286,8 @@ class BoxFileSystemMocker:
 
             test.mock_items[self.object_id].append(file)
             test.file_items[file_id] = file
+            file._parent_id = self.object_id
+            created_files.add(file)
             return file
 
         def update_contents_with_stream(self, *args, **kwargs):
@@ -302,7 +304,6 @@ class BoxFileSystemMocker:
             # Update stored file response object
             test.file_items[file_id]._response_object = file._response_object
             test.file_items[file_id].__dict__.update(file._response_object)
-
             return file
 
         def _build_file(self, file_id, data_contents, parent=None, **kwargs):
@@ -339,6 +340,14 @@ class BoxFileSystemMocker:
                     update_contents_with_stream,
                 )
                 yield
+            for file in created_files:
+                try:
+                    file_id = file.object_id
+                    parent_id = file._parent_id
+                    del test.file_items[file_id] 
+                    test.mock_items[parent_id].remove(file)
+                except Exception:
+                    pass
         else:
             # Modify the upload function to track all uploaded files
             _original_function = boxsdk.object.folder.Folder.upload_stream
@@ -362,6 +371,7 @@ class BoxFileSystemMocker:
 
     @pytest.fixture(scope="class")
     def mock_copy(test, fs, do_mock, setup, scopes):
+        created_files = []
         def copy(self, *, parent_folder, name, file_version=None, **kwargs):
             if scopes and TokenScope.ITEM_READWRITE not in scopes:
                 raise test.SCOPE_ERROR
@@ -392,13 +402,22 @@ class BoxFileSystemMocker:
             test.contents[file_id] = test.contents[self.object_id]
             test.mock_items[parent_folder.object_id].append(file)
             test.file_items[file_id] = file
+            file._parent_id = parent_folder.object_id
+            created_files.append(file)
 
         if do_mock:
             with pytest.MonkeyPatch.context() as monkeypatch:
                 monkeypatch.setattr(boxsdk.object.file.File, "copy", copy)
                 yield
+            for file in created_files:
+                try:
+                    file_id = file.object_id
+                    parent_id = file._parent_id
+                    del test.file_items[file_id]
+                    test.mock_items[parent_id].remove(file)
+                except Exception:
+                    pass
         else:
-            created_files = []
             _original_function = boxsdk.object.file.File.copy
 
             def wrap(self, *args, **kwargs):
@@ -430,6 +449,7 @@ class BoxFileSystemMocker:
 
     @pytest.fixture(scope="class")
     def mock_create_subfolder(test, fs, do_mock, client, scopes):
+        created_folders = []
         def create_subfolder(self, name):
             if scopes and TokenScope.ITEM_READWRITE not in scopes:
                 raise test.SCOPE_ERROR
@@ -464,6 +484,7 @@ class BoxFileSystemMocker:
             )
             test.mock_items[self.object_id].append(folder)
             test.folders[folder_id] = folder_json
+            created_folders.append(folder)
             return folder
 
         if do_mock:
@@ -472,8 +493,15 @@ class BoxFileSystemMocker:
                     boxsdk.object.folder.Folder, "create_subfolder", create_subfolder
                 )
                 yield
+            for folder in created_folders:
+                try:
+                    folder_id = folder.id
+                    parent_id = folder.path_collection["entries"][-1].id
+                    del test.folders[folder_id]
+                    test.mock_items[parent_id].remove(folder)
+                except Exception:
+                    pass
         else:
-            created_folders = []
             _original_function = boxsdk.object.folder.Folder.create_subfolder
 
             def wrap(self, *args, **kwargs):

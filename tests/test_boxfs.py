@@ -195,7 +195,7 @@ class TestBoxFileSystem(BoxFileSystemMocker):
         "mock_folder_get",
         "mock_upload",
     )
-    def test_box_caching(self, fs_caching, write_expectation, mocker):
+    def test_box_caching(self, fs_caching, write_expectation, call_counter):
         """File writes and reads correctly"""
         path = "caching.txt"
         path2 = "caching2.txt"
@@ -206,12 +206,28 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             with fs_caching.open(path2, "wb") as f:
                 f.write(b"abc")
 
-            import boxsdk.object.folder, boxsdk.object.file
-            spy_folder = mocker.spy(boxsdk.object.folder.Folder, "get_items")
-            spy_file = mocker.spy(boxsdk.object.file.File, "get")
+            # def wrapper(*args, **kwargs):
+            #     boxsdk.object.folder.Folder.get_items(*args, **kwargs)
+            #     pass
+
+            # import boxsdk.object.folder, boxsdk.object.file
+            # spy_folder = mocker.patch.object(
+            #     boxsdk.object.folder.Folder,
+            #     "get_items",
+            #     spec=boxsdk.object.folder.Folder,
+            #     side_effect=wrapper
+            # )
+            # spy_file = mocker.patch.object(
+            #     boxsdk.object.file.File,
+            #     "get",
+            #     spec=boxsdk.object.file.File,
+            #     side_effect=wrapper
+            # )
+            # spy_folder = mocker.spy(boxsdk.object.folder.Folder, "get_items")
+            # spy_file = mocker.spy(boxsdk.object.file.File, "get")
 
             def count_calls():
-                return spy_folder.call_count + spy_file.call_count
+                return call_counter["boxsdk.object.folder.Folder.get_items"] + call_counter["boxsdk.object.file.File.get"]
 
             fs_caching.ls("", detail=True, refresh=True)
             calls_to_get_file = count_calls()
@@ -228,3 +244,18 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             fs_caching.ls(path, detail=True, refresh=True)
             assert calls_to_get_file < count_calls()
 
+    @pytest.mark.usefixtures(
+        "mock_folder_get_items",
+        "mock_create_subfolder",
+        "mock_folder_get",
+        "mock_file_get",
+    )
+    def test_box_info(self, fs, write_expectation, write_file):
+        path = "file_info.txt"
+        with write_expectation:
+            write_file(path)
+            info = fs.info(path)
+
+            assert info['name'].endswith(path)
+            assert info['size'] > 0
+            assert info['type'] == 'file'
