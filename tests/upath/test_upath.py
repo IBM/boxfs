@@ -46,6 +46,12 @@ class TestBoxUPath(BoxFileSystemMocker):
             root_path=root_path,
             scopes=scopes
         )
+    
+    def test_fspath(self, test_path):
+        sub_path = test_path / "Subfolder"
+        sub_path_url = sub_path.__fspath__()
+
+        assert sub_path_url == "box://Test UPath Folder/Subfolder"
 
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
