@@ -1,7 +1,6 @@
 import upath.core
 import upath.registry
 
-
 class _BoxAccessor(upath.core._FSSpecAccessor):
     def mkdir(self, path, create_parents=True, **kwargs):
         if (
@@ -55,7 +54,7 @@ class BoxPath(upath.core.UPath):
         cls,
         drv: str,
         root: str,
-        parts: list[str],
+        parts,
         url=None,
         **kwargs,
     ) -> str:
