@@ -48,7 +48,7 @@ class BoxFileSystem(AbstractFileSystem):
     _default_root_id = "0"
     
     default_options = {
-        "refresh": True
+        "refresh": False
     }
 
     # fmt: off
