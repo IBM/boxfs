@@ -43,7 +43,7 @@ FS_TYPES = {
 
 class BoxFileSystem(AbstractFileSystem):
     protocol = "box"
-    root_marker = ""
+    root_marker = "/"
     root_id = "0"
     _default_root_id = "0"
     
@@ -201,6 +201,9 @@ class BoxFileSystem(AbstractFileSystem):
     def _strip_protocol(cls, path) -> str:
         path = super()._strip_protocol(path)
         path = path.replace("\\", "/")
+        # Make all paths start with root marker
+        if not path.startswith(cls.root_marker):
+            path = cls.root_marker + path
         return path
 
     def _get_relative_path(self, path: str):
@@ -269,7 +272,7 @@ class BoxFileSystem(AbstractFileSystem):
         _closest_id = self.seek_closest_known_path(path)
         _closest = self.client.folder(_closest_id)
         _closest_path = self._construct_path(_closest)
-        remaining_path = path.lstrip(self.root_marker).replace(_closest_path, "", 1)
+        remaining_path = path.replace(_closest_path, "", 1)
         if remaining_path == "":
             return _closest_id
         try:
@@ -354,7 +357,7 @@ class BoxFileSystem(AbstractFileSystem):
         path = self._strip_protocol(path)
 
         object_id = self.path_to_file_id(path)
-        cache_path = path.rstrip("/")
+        cache_path = path.rstrip("/") if path != "/" else path
         items = None
         _dircached = False
 

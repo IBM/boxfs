@@ -183,19 +183,19 @@ class TestBoxFileSystem(BoxFileSystemMocker):
         with write_expectation:
             fs.mkdir(path)
             items = fs.ls("/", refresh=True)
-            assert any(item["name"] == path for item in items)
+            assert any(item["name"].lstrip("/") == path for item in items)
 
             path2 = "Subfolder 2/Subsubfolder"
             with pytest.raises(FileNotFoundError):
                 fs.mkdir(path2, create_parents=False)
             items = fs.ls("/", refresh=True)
-            assert not any(item["name"] == path2 for item in items)
+            assert not any(item["name"].lstrip("/") == path2 for item in items)
 
             fs.mkdir(path2, create_parents=True)
             items = fs.ls("/", refresh=True)
-            assert any(item["name"] == "Subfolder 2" for item in items)
+            assert any(item["name"] == "/Subfolder 2" for item in items)
             items2 = fs.ls("Subfolder 2", refresh=True)
-            assert any(item["name"] == "Subfolder 2/Subsubfolder" for item in items2)
+            assert any(item["name"] == "/Subfolder 2/Subsubfolder" for item in items2)
 
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
