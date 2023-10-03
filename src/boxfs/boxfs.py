@@ -357,7 +357,7 @@ class BoxFileSystem(AbstractFileSystem):
         path = self._strip_protocol(path)
 
         object_id = self.path_to_file_id(path)
-        cache_path = path.rstrip("/")
+        cache_path = path.rstrip("/") if path != "/" else path
         items = None
         _dircached = False
 
