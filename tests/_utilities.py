@@ -165,7 +165,41 @@ class BoxFileSystemMocker:
         return NotImplementedError("Abstract method")
 
     @pytest.fixture(scope="class")
-    def mock_folder_get_items(test, do_mock):
+    def call_counter(self):
+        """Returns a dictionary containing the count of calls to wrapped methods
+        
+        Since this is class-scoped, it should only be used to compare at different
+        states rather than absolute values"""
+        counter = defaultdict(int)
+        yield counter
+
+    @pytest.fixture(scope="class")
+    def wrap_call(self, do_mock, call_counter):
+        """Fixture which returns a function, which yields a monkeypatched
+        context when called"""
+
+        def wrap_method(obj, func_name, mocked):
+            """Function to be called within each fixture"""
+            unmocked = getattr(obj, func_name)
+            key = f"{obj.__module__}.{obj.__name__}.{func_name}"
+
+            def wrapped(*args, **kwargs):
+                """Function to be hit every time the real/mocked method
+                is called"""
+                
+                call_counter[key] += 1
+                if do_mock:
+                    return mocked(*args, **kwargs)
+                else:
+                    return unmocked(*args, **kwargs)
+
+            with pytest.MonkeyPatch.context() as monkeypatch:
+                monkeypatch.setattr(obj, func_name, wrapped)
+                yield
+        return wrap_method
+
+    @pytest.fixture(scope="class")
+    def mock_folder_get_items(test, wrap_call):
         def get_items(self, *args, **kwargs):
             if self.object_id in test.mock_items:
                 return MockedCollection(
@@ -187,15 +221,10 @@ class BoxFileSystemMocker:
                     mock_entries=None,
                 )
 
-        if do_mock:
-            with pytest.MonkeyPatch.context() as monkeypatch:
-                monkeypatch.setattr(boxsdk.object.folder.Folder, "get_items", get_items)
-                yield
-        else:
-            yield
+        yield from wrap_call(boxsdk.object.folder.Folder, "get_items", get_items)
 
     @pytest.fixture(scope="class")
-    def mock_folder_get(test, do_mock, box_error):
+    def mock_folder_get(test, wrap_call, box_error):
         def get(self, *args, **kwargs):
             if self.object_id in test.folders:
                 folder = test.folders[self.object_id]
@@ -203,27 +232,17 @@ class BoxFileSystemMocker:
             else:
                 raise box_error("not_found", _type="folder", object_id=self.object_id)
 
-        if do_mock:
-            with pytest.MonkeyPatch.context() as monkeypatch:
-                monkeypatch.setattr(boxsdk.object.folder.Folder, "get", get)
-                yield
-        else:
-            yield
+        yield from wrap_call(boxsdk.object.folder.Folder, "get", get)
 
     @pytest.fixture(scope="class")
-    def mock_file_get(test, do_mock, box_error):
+    def mock_file_get(test, wrap_call, box_error):
         def get(self, *args, **kwargs):
             if self.object_id in test.file_items:
                 return test.file_items[self.object_id]
             else:
                 raise box_error("not_found", _type="file", object_id=self.object_id)
 
-        if do_mock:
-            with pytest.MonkeyPatch.context() as monkeypatch:
-                monkeypatch.setattr(boxsdk.object.file.File, "get", get)
-                yield
-        else:
-            yield
+        yield from wrap_call(boxsdk.object.file.File, "get", get)
 
     @pytest.fixture(scope="class")
     def mock_item_delete(test, do_mock, box_error):
@@ -432,7 +451,7 @@ class BoxFileSystemMocker:
                 file.delete()
 
     @pytest.fixture(scope="class")
-    def mock_file_content(test, do_mock, mock_file_get, box_error):
+    def mock_file_content(test, wrap_call, mock_file_get, box_error):
         def content(self, *args, **kwargs):
             file_id = self.object_id
             if file_id in test.contents:
@@ -440,12 +459,7 @@ class BoxFileSystemMocker:
 
             raise box_error("not_found", _type="file", object_id=self.object_id)
 
-        if do_mock:
-            with pytest.MonkeyPatch.context() as monkeypatch:
-                monkeypatch.setattr(boxsdk.object.file.File, "content", content)
-                yield
-        else:
-            yield
+        yield from wrap_call(boxsdk.object.file.File, "content", content)
 
     @pytest.fixture(scope="class")
     def mock_create_subfolder(test, fs, do_mock, client, scopes):
