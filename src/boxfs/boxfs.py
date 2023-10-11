@@ -364,12 +364,14 @@ class BoxFileSystem(AbstractFileSystem):
         if not refresh:
             try:
                 items = self._ls_from_cache(cache_path)
-                _dircached = items is not None
+                # Check that the cache didn't return a self folder instead of the children items, which happens if the parent folder is cached but the path folder is not
+                did_return_self = (items is not None) and (len(items) == 1) and (items[0]["name"] == path.rstrip("/")) and (items[0]["type"] == "directory")
+                _dircached = not did_return_self
             except FileNotFoundError:
                 # Not in cache, so try to retrieve normally
                 pass
 
-        if refresh or items is None:
+        if refresh or not _dircached:
             try:
                 # _object = self.client.folder(object_id).get()
                 items = list(

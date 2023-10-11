@@ -234,6 +234,27 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             # Should already be cached from the parent ls
             fs_caching.ls(path, detail=True, refresh=True)
             assert calls_to_get_file < count_calls()
+    
+    @pytest.mark.usefixtures(
+        "mock_folder_get_items",
+        "mock_file_get",
+        "mock_folder_get",
+        "mock_upload",
+        "mock_create_subfolder"
+    )
+    def test_box_caching_folder(self, fs, fs_caching, write_expectation, call_counter):
+        outer_folder = "outer folder"
+        inner_folder = "outer folder/inner folder"
+        inner_path = "outer folder/inner folder/item.txt"
+
+        with write_expectation:
+            fs.mkdir(inner_folder, create_parents=True)
+            fs.touch(inner_path)
+
+            fs_caching.ls(outer_folder)
+            items = fs_caching.ls(inner_folder)
+
+            assert any(inner_path == item["name"].lstrip("/") for item in items)
 
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
