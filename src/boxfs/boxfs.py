@@ -312,7 +312,7 @@ class BoxFileSystem(AbstractFileSystem):
         path = self._strip_protocol(path)
         parent = self._parent(path)
         if self.exists(path):
-            return
+            raise FileExistsError(path)
         if not self.exists(parent):
             if create_parents:
                 self.mkdir(parent, create_parents=create_parents)

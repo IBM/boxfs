@@ -10,7 +10,7 @@ import boxfs  # noqa: F401
 
 @pytest.mark.mock_only
 def test_box_protocol_registered():
-    assert "box" in upath.registry._registry.known_implementations
+    assert "box" in upath.registry.available_implementations()
 
 
 @pytest.fixture(
@@ -49,9 +49,12 @@ class TestBoxUPath(BoxFileSystemMocker):
     
     def test_fspath(self, test_path):
         sub_path = test_path / "Subfolder"
-        sub_path_url = sub_path.__fspath__()
+        sub_path_url = str(sub_path)
 
         assert sub_path_url == "box:///Test UPath Folder/Subfolder"
+
+        import boxfs._upath
+        assert type(test_path) is boxfs._upath.BoxPath
 
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
@@ -74,6 +77,30 @@ class TestBoxUPath(BoxFileSystemMocker):
             read_text = f.read()
 
         assert read_text == text
+    
+    @pytest.mark.usefixtures(
+        "mock_folder_get_items",
+        "mock_folder_get",
+        "mock_create_subfolder",
+    )
+    def test_mkfolder(self, test_path: upath.UPath):
+        subfolder = test_path / "Subfolder"
+
+        assert not subfolder.exists()
+        subfolder.mkdir()
+        assert subfolder.exists()
+
+        with pytest.raises(FileExistsError):
+            subfolder.mkdir(exist_ok=False)
+
+        deep_folder = test_path / "Subfolder 2" / "Nested Folder"
+
+        with pytest.raises(Exception):
+            deep_folder.mkdir(parents=False)
+
+        assert not deep_folder.exists()
+        deep_folder.mkdir(parents=True)
+        assert deep_folder.exists()
 
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
