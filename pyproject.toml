@@ -30,7 +30,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
-boxsdk = {version = "^3.7", extras = ["jwt"]}
+box-sdk-gen = {version = ">=1.10.0", extras = ["jwt"]}
 fsspec = ">=2023.4"
 universal-pathlib = {version = "^0.2", optional = true}
 

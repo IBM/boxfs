@@ -6,6 +6,7 @@ import upath
 
 from .._utilities import BoxFileSystemMocker
 import boxfs  # noqa: F401
+import box_sdk_gen
 
 
 @pytest.mark.mock_only
@@ -21,11 +22,10 @@ def scopes(request):
 
 
 class TestBoxUPath(BoxFileSystemMocker):
-
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="function")
     def test_path(
         self,
-        client,
+        client: box_sdk_gen.BoxClient,
         client_type,
         root_id,
         root_path,
@@ -37,16 +37,19 @@ class TestBoxUPath(BoxFileSystemMocker):
             root_id = "0"
         if client is None:
             import fsspec
+
             client = fsspec.filesystem("box", client_type=client_type).client
-        client.folder(root_id).create_subfolder("Test UPath Folder")
+        client.folders.create_folder(
+            "Test UPath Folder", box_sdk_gen.CreateFolderParent(root_id)
+        )
         yield upath.UPath(
             "box:///Test UPath Folder",
             client=client,
             root_id=root_id,
             root_path=root_path,
-            scopes=scopes
+            scopes=scopes,
         )
-    
+
     def test_fspath(self, test_path):
         sub_path = test_path / "Subfolder"
         sub_path_url = str(sub_path)
@@ -54,6 +57,7 @@ class TestBoxUPath(BoxFileSystemMocker):
         assert sub_path_url == "box:///Test UPath Folder/Subfolder"
 
         import boxfs._upath
+
         assert type(test_path) is boxfs._upath.BoxPath
 
     @pytest.mark.usefixtures(
@@ -77,7 +81,7 @@ class TestBoxUPath(BoxFileSystemMocker):
             read_text = f.read()
 
         assert read_text == text
-    
+
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
         "mock_folder_get",
