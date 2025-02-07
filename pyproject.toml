@@ -36,6 +36,7 @@ universal-pathlib = {version = "^0.2", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = { version = "^7.1", python = ">=3.7" }
+ruff = { version = "*" }
 
 [tool.poetry.extras]
 upath = ["universal-pathlib"]
@@ -48,7 +49,7 @@ upath = ["universal-pathlib"]
 # named `PYTEST_ADDOPTS`
 # addopts = "--with_api --api_config=\"<path\\to\\box\\app_config.json>\" --box_root_id <ROOT FOLDER ID>"
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "*/__init__.py" = ["F401"]
 
 [tool.poetry.plugins."universal_pathlib.implementations"]
