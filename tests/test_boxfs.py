@@ -290,3 +290,7 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             assert info["name"].endswith(path)
             assert info["size"] > 0
             assert info["type"] == "file"
+
+            write_file("file_info2.txt")
+            folder_info = fs.ls("/")
+            assert len(folder_info) == 2

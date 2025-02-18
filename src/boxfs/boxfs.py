@@ -397,13 +397,17 @@ class BoxFileSystem(AbstractFileSystem):
                 pass
 
         if refresh or not _dircached:
+            marker = None
+            items = []
             try:
-                # _object = self.client.folder(object_id).get()
-                items = list(
-                    self.client.folders.get_folder_items(
-                        object_id, fields=self._fields
-                    ).entries
-                )
+                while True:
+                    folder_items = self.client.folders.get_folder_items(
+                        object_id, fields=self._fields, marker=marker, usemarker=True
+                    )
+                    items.extend(folder_items.entries)
+                    marker = folder_items.next_marker
+                    if marker is None or marker == "null" or marker == "":
+                        break
             except BoxAPIError as error:
                 if error.response_info.status_code == 401:
                     self.refresh()

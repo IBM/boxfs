@@ -9,7 +9,7 @@ dynamic = ["version"]
 
 [tool.poetry]
 name = "boxfs"
-version = "1.0.0a1"
+version = "1.0.0a2"
 description = "Implementation of fsspec for Box file storage"
 authors = ["Thomas Hunter <boxfs.tehunter@gmail.com>"]
 packages = [
@@ -20,7 +20,7 @@ license = "MIT"
 repository = "https://github.com/IBM/boxfs"
 keywords = ["file-storage", "fsspec", "file-system", "box"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Topic :: Database",
     "Topic :: Office/Business",
     "Topic :: Software Development :: Libraries :: Python Modules",

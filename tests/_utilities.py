@@ -2,6 +2,7 @@ from collections import defaultdict
 import copy
 import datetime
 import io
+import itertools
 from typing import IO
 
 import box_sdk_gen
@@ -208,9 +209,28 @@ class BoxFileSystemMocker:
 
     @pytest.fixture(scope="function")
     def mock_folder_get_items(test, wrap_call, box_error):
-        def get_items(self, folder_id, **kwargs) -> list[FileFull | FolderMini]:
+        marker_tracker = itertools.count()
+        markers = {}
+
+        def get_items(
+            self, folder_id, *, usemarker=None, marker=None, **kwargs
+        ) -> list[FileFull | FolderMini]:
             if folder_id in test.mock_items:
-                return box_sdk_gen.Items(entries=test.mock_items[folder_id])
+                entries = test.mock_items[folder_id]
+                next_marker = None
+                if len(entries) > 0 and usemarker:
+                    if marker:
+                        marker_offset = markers[marker]
+                    else:
+                        marker_offset = 0
+
+                    if marker_offset + 1 < len(entries):
+                        next_marker = str(next(marker_tracker))
+                        markers[next_marker] = marker_offset + 1
+                    else:
+                        next_marker = None
+                    entries = [entries[marker_offset]]
+                return box_sdk_gen.Items(entries=entries, next_marker=next_marker)
             elif folder_id in test.folders:
                 return box_sdk_gen.Items(entries=[])
             else:
