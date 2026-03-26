@@ -8,11 +8,14 @@ import contextlib
 import hashlib
 import logging
 import tempfile
-from typing import Iterable, Mapping, Optional, Type
+from typing import Iterable, Mapping, Optional, Type, Any
 import warnings
 
 from box_sdk_gen import (
     BoxClient,
+    FilePathCollectionField,
+    FolderMini,
+    FolderPathCollectionField,
     JWTConfig,
     BoxJWTAuth,
     BoxAPIError,
@@ -25,6 +28,7 @@ from box_sdk_gen import (
     UploadFileAttributesParentField,
     BoxOAuth,
     FileOrFolderScopeScopeField,
+    WebLink,
 )
 
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
@@ -72,7 +76,7 @@ class BoxFileSystem(AbstractFileSystem):
         client_type: Type[BoxClient] = BoxClient,
         root_id: _ObjectId = None,
         root_path: _PathLike = None,
-        path_map: Optional[Mapping[_PathLike, _ObjectId]] = None,
+        path_map: Optional[dict[_PathLike, FileFull]] = None,
         scopes: Optional[Iterable[FileOrFolderScopeScopeField]] = None,
         cache_paths: bool = True,
         **kwargs,
@@ -121,7 +125,7 @@ class BoxFileSystem(AbstractFileSystem):
         super().__init__(**kwargs)
         if path_map is None:
             path_map = {}
-        self.path_map = path_map
+        self.path_map: dict[_PathLike, FileFull] = path_map
         if client is None:
             if isinstance(oauth, str):
                 config = JWTConfig.from_config_file(oauth)
@@ -129,8 +133,8 @@ class BoxFileSystem(AbstractFileSystem):
             self.connect(oauth, client_type)
         else:
             self.client = client
-        self.root_id = self._get_root_id(root_id, root_path)
-        self.root_path = self._get_root_path(self.root_id)
+        self.root_id: _ObjectId = self._get_root_id(root_id, root_path)
+        self.root_path: _PathLike = self._get_root_path(self.root_id)
 
         self._original_client = self.client
         self.scopes = scopes
@@ -265,7 +269,7 @@ class BoxFileSystem(AbstractFileSystem):
                     raise FileNotFoundError("Could not find folder in Box Drive")
         except BoxAPIError as error:
             if error.response_info.status_code == 401:
-                self.refresh()
+                self.refresh_token()
                 return self._get_absolute_path_id(path)
             else:
                 raise FileNotFoundError("Could not find folder in Box Drive")
@@ -293,6 +297,8 @@ class BoxFileSystem(AbstractFileSystem):
                 items = self.client.folders.get_folder_items(
                     _closest.id, fields=self._fields
                 )
+                if not items.entries:
+                    raise FileNotFoundError("Could not find folder in Box Drive")
                 for item in items.entries:
                     item_path = "/".join((_closest_path, item.name))
                     self._add_to_path_map(item_path, item)
@@ -305,7 +311,7 @@ class BoxFileSystem(AbstractFileSystem):
                     raise FileNotFoundError("Could not find folder in Box Drive")
         except BoxAPIError as error:
             if error.response_info.status_code == 401:
-                self.refresh()
+                self.refresh_token()
                 return self._get_relative_path_id(path)
             else:
                 raise FileNotFoundError("Could not find folder in Box Drive")
@@ -376,22 +382,25 @@ class BoxFileSystem(AbstractFileSystem):
 
         object_id = self.path_to_file_id(path)
         cache_path = path.rstrip("/") if path != "/" else path
-        items: list[FileFull] = None
+        items: Optional[list[FileFull | FolderMini | WebLink]] = None
+        fsspec_items: list[dict[str, Any]] = []
         _dircached = False
 
         if not refresh:
             try:
-                items = self._ls_from_cache(cache_path)
-                # Check that the cache didn't return a self folder instead of
-                # the children items, which happens if the parent folder is
-                # cached but the path folder is not
-                did_return_self = (
-                    (items is not None)
-                    and (len(items) == 1)
-                    and (items[0]["name"] == path.rstrip("/"))
-                    and (items[0]["type"] == "directory")
-                )
-                _dircached = (items is not None) and not did_return_self
+                _from_cache = self._ls_from_cache(cache_path)
+                if _from_cache is not None:
+                    fsspec_items: list[dict[str, Any]] = _from_cache
+                    # Check that the cache didn't return a self folder instead of
+                    # the children items, which happens if the parent folder is
+                    # cached but the path folder is not
+                    did_return_self = (
+                        (fsspec_items is not None)
+                        and (len(fsspec_items) == 1)
+                        and (fsspec_items[0]["name"] == path.rstrip("/"))
+                        and (fsspec_items[0]["type"] == "directory")
+                    )
+                    _dircached = (fsspec_items is not None) and not did_return_self
             except FileNotFoundError:
                 # Not in cache, so try to retrieve normally
                 pass
@@ -404,13 +413,14 @@ class BoxFileSystem(AbstractFileSystem):
                     folder_items = self.client.folders.get_folder_items(
                         object_id, fields=self._fields, marker=marker, usemarker=True
                     )
-                    items.extend(folder_items.entries)
+                    if folder_items.entries:
+                        items.extend(folder_items.entries)
                     marker = folder_items.next_marker
                     if marker is None or marker == "null" or marker == "":
                         break
             except BoxAPIError as error:
                 if error.response_info.status_code == 401:
-                    self.refresh()
+                    self.refresh_token()
                     return self.ls(path, detail=detail)
 
         if items is None:
@@ -418,11 +428,13 @@ class BoxFileSystem(AbstractFileSystem):
             items = [self.client.files.get_file_by_id(object_id, fields=self._fields)]
 
         if _dircached:
-            fsspec_items = items
+            pass
         else:
             # Need to convert Box API response to fsspec response dictionary
             fsspec_items = []
             for item in items:
+                if isinstance(item, WebLink):
+                    continue
                 item_path = self._construct_path(item, relative=True)
                 fsspec_items.append(
                     {
@@ -481,17 +493,26 @@ class BoxFileSystem(AbstractFileSystem):
         file_id = self.path_to_file_id(path)
         return self.client.downloads.get_download_file_url(file_id)
 
-    def _construct_path(self, item: FileFull | FolderFull, relative=True):
+    def _construct_path(self, item: FileFull | FolderMini, relative=True):
         if not hasattr(item, "path_collection"):
-            item = item.get(fields=["name", "path_collection"])
+            if item.type == "folder":
+                item = self.client.folders.get_folder_by_id(item.id, fields=["name", "path_collection"])
+            else:
+                item = self.client.files.get_file_by_id(item.id, fields=["name", "path_collection"])
+            path_collection = item.path_collection
+        else:
+            path_collection = getattr(item, "path_collection")
+
         path_parts = []
+        path_entries: list[FolderMini]
         # Seems like a bug in box_sdk_gen, where getting folder items with "fields"
         # doesn't deserialize into the appropriate types, instead returning a dict
-        if hasattr(item.path_collection, "entries"):
-            path_collection = getattr(item.path_collection, "entries", None)
+        if hasattr(path_collection, "entries"):
+            path_entries = getattr(path_collection, "entries", [])
         else:
-            path_collection = item.path_collection.get("entries")
-        for path_part in path_collection:
+            path_entries = path_collection.get("entries")
+
+        for path_part in path_entries:
             name = getattr(path_part, "name", None) or path_part.get("name")
             path_parts.append(name)
         path = "/".join((*path_parts, item.name))
