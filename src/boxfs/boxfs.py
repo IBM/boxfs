@@ -405,7 +405,7 @@ class BoxFileSystem(AbstractFileSystem):
                 # Not in cache, so try to retrieve normally
                 pass
 
-        if refresh or not _dircached:
+        if not _dircached:
             marker = None
             items = []
             try:
@@ -422,14 +422,12 @@ class BoxFileSystem(AbstractFileSystem):
                 if error.response_info.status_code == 401:
                     self.refresh_token()
                     return self.ls(path, detail=detail)
+                elif error.response_info.status_code in (403, 404, 405):
+                    # item is a file, not a folder
+                    items = [self.client.files.get_file_by_id(object_id, fields=self._fields)]
+                else:
+                    raise error
 
-        if items is None:
-            # item is a file, not a folder
-            items = [self.client.files.get_file_by_id(object_id, fields=self._fields)]
-
-        if _dircached:
-            pass
-        else:
             # Need to convert Box API response to fsspec response dictionary
             fsspec_items = []
             for item in items:
