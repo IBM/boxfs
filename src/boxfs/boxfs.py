@@ -365,7 +365,14 @@ class BoxFileSystem(AbstractFileSystem):
     def rm_file(self, path, etag=None):
         """Remove a file. Passes `etag` along to Box delete"""
         file_id = self.path_to_file_id(path)
-        self.client.files.delete_file_by_id(file_id, if_match=etag)
+        try:
+            self.client.files.delete_file_by_id(file_id, if_match=etag)
+        except BoxAPIError as error:
+            if error.response_info.status_code == 404:
+                # File not found, possibly already deleted
+                pass
+            else:
+                raise error
         self._remove_from_path_map(path)
 
     def rmdir(self, path, recursive: bool = False, etag: str | None = None):
