@@ -15,21 +15,58 @@ def test_box_protocol_registered():
 
 
 @pytest.fixture(
-    scope="class",
+    scope="module",
 )
 def scopes(request):
     return None
 
 
 class TestBoxUPath(BoxFileSystemMocker):
-    @pytest.fixture(scope="function")
+    @pytest.fixture(scope="class", autouse=True)
+    def setup_path_real_api(
+        self,
+        client,
+        client_type,
+        root_id,
+        do_mock
+    ):
+        # Due to this fixture's scope, it will execute before create_subfolder is mocked
+        # and will only execute once for live API testing
+        if do_mock:
+            yield None
+            return
+
+        if root_id is None:
+            root_id = "0"
+        if client is None:
+            import fsspec
+
+            client = fsspec.filesystem("box", client_type=client_type).client
+
+        folder = None
+        path_exists = False
+        try:
+            folder = client.folders.create_folder(
+                "Test UPath Folder", box_sdk_gen.CreateFolderParent(root_id)
+            )
+        except box_sdk_gen.BoxAPIError as error:
+            if error.response_info.status_code == 409:
+                path_exists = True
+
+        yield folder
+
+        if folder is not None and not path_exists:
+            client.folders.delete_folder_by_id(folder.id)
+
+    @pytest.fixture(scope="function", autouse=True)
     def test_path(
         self,
-        client: box_sdk_gen.BoxClient,
+        client: box_sdk_gen.BoxClient | None,
         client_type,
         root_id,
         root_path,
         scopes,
+        do_mock,
         mock_folder_get,
         mock_create_subfolder,
     ):
@@ -39,9 +76,10 @@ class TestBoxUPath(BoxFileSystemMocker):
             import fsspec
 
             client = fsspec.filesystem("box", client_type=client_type).client
-        client.folders.create_folder(
-            "Test UPath Folder", box_sdk_gen.CreateFolderParent(root_id)
-        )
+        if do_mock:
+            client.folders.create_folder(
+                "Test UPath Folder", box_sdk_gen.CreateFolderParent(root_id)
+            )
         path = upath.UPath(
             "box:///Test UPath Folder",
             client=client,

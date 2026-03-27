@@ -609,14 +609,15 @@ class BoxFileSystemMocker:
                     box_sdk_gen.FoldersManager, "create_folder", create_subfolder
                 )
                 yield
-            for folder in created_folders:
+            for folder in reversed(created_folders):
                 try:
                     folder_id = folder.id
-                    parent_id = folder.path_collection["entries"][-1].id
                     del test.folders[folder_id]
-                    test.mock_items[parent_id].remove(folder)
-                except Exception:
-                    pass
+                    if folder.path_collection is not None:
+                        parent_id = folder.path_collection.entries[-1].id
+                        test.mock_items[parent_id].remove(folder)
+                except Exception as e:
+                    raise e
         else:
             _original_function = box_sdk_gen.FoldersManager.create_folder
 
