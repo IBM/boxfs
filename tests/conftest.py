@@ -102,10 +102,15 @@ def box_error():
     def _error(code, **kwargs):
         error_details = BOX_CODES[code]
         return box_sdk_gen.BoxAPIError(
-            request_info=box_sdk_gen.RequestInfo(None, None, None, None),
+            request_info=box_sdk_gen.RequestInfo(
+                method="",
+                url="",
+                query_params={},
+                headers={}
+            ),
             response_info=box_sdk_gen.ResponseInfo(
                 status_code=error_details["status"],
-                headers=None,
+                headers={},
                 body=error_details["message"],
                 code=code,
                 context_info={

@@ -29,10 +29,10 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<4.0"
-box-sdk-gen = {version = ">=1.10.0", extras = ["jwt"]}
-fsspec = ">=2023.4"
-universal-pathlib = {version = "^0.2", optional = true}
+python = ">=3.10,<4.0"
+box-sdk-gen = {version = ">=1.15.0", extras = ["jwt"]}
+fsspec = ">=2024.12"
+universal-pathlib = {version = ">=0.3.8", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = { version = "^7.1", python = ">=3.7" }
@@ -41,9 +41,6 @@ ruff = { version = "*" }
 [tool.poetry.extras]
 upath = ["universal-pathlib"]
 
-[tool.poetry.plugins."fsspec.specs"]
-"box" = "boxfs.boxfs:BoxFileSystem"
-
 [tool.pytest.ini_options]
 # To test with API, update the info below and uncomment, or set an environment variable
 # named `PYTEST_ADDOPTS`
@@ -51,6 +48,3 @@ upath = ["universal-pathlib"]
 
 [tool.ruff.lint.per-file-ignores]
 "*/__init__.py" = ["F401"]
-
-[tool.poetry.plugins."universal_pathlib.implementations"]
-box = "boxfs._upath:BoxPath"

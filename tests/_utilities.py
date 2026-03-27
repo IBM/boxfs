@@ -3,10 +3,11 @@ import copy
 import datetime
 import io
 import itertools
-from typing import IO
+from typing import IO, Any
 
 import box_sdk_gen
 from box_sdk_gen import (
+    BoxAPIError,
     File,
     Files,
     FileFull,
@@ -621,6 +622,8 @@ class BoxFileSystemMocker:
 
             def wrap(self, *args, **kwargs):
                 folder = _original_function(self, *args, **kwargs)
+                # Note: mkdir has already checked if the folder exists, so we'll only
+                # append to `created_folders` if it's actually new
                 created_folders.append(folder)
                 return folder
 
@@ -638,10 +641,15 @@ class BoxFileSystemMocker:
                         raise e
 
     SCOPE_ERROR = box_sdk_gen.BoxAPIError(
-        box_sdk_gen.RequestInfo(None, None, None, None),
+        box_sdk_gen.RequestInfo(
+            method="",
+            url="",
+            query_params={},
+            headers={}
+        ),
         box_sdk_gen.ResponseInfo(
             status_code=403,
-            headers=None,
+            headers={},
             body="not_found",
             raw_body="not_found",
             code="not_found",

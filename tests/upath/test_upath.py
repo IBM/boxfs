@@ -5,12 +5,12 @@ import pytest
 import upath
 
 from .._utilities import BoxFileSystemMocker
-import boxfs  # noqa: F401
 import box_sdk_gen
 
 
 @pytest.mark.mock_only
 def test_box_protocol_registered():
+    import upath.registry
     assert "box" in upath.registry.available_implementations()
 
 
@@ -42,13 +42,17 @@ class TestBoxUPath(BoxFileSystemMocker):
         client.folders.create_folder(
             "Test UPath Folder", box_sdk_gen.CreateFolderParent(root_id)
         )
-        yield upath.UPath(
+        path = upath.UPath(
             "box:///Test UPath Folder",
             client=client,
             root_id=root_id,
             root_path=root_path,
             scopes=scopes,
+            # Caching paths during mock can lead to race conditions between
+            # test functions, since we don't mock unique item IDs
+            cache_paths=False,
         )
+        yield path
 
     def test_fspath(self, test_path):
         sub_path = test_path / "Subfolder"
