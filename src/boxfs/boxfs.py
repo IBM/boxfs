@@ -362,6 +362,31 @@ class BoxFileSystem(AbstractFileSystem):
         path = self._get_relative_path(path)
         self.path_map.pop(path, None)
 
+    def rm(self, path, recursive=False, maxdepth=None, etag=None):
+        """Delete files.
+
+        Parameters
+        ----------
+        path: str or list of str
+            File(s) to delete.
+        recursive: bool
+            If file(s) are directories, recursively delete contents and then
+            also remove the directory
+        maxdepth: int or None
+            Depth to pass to walk for finding files to delete, if recursive.
+            If None, there will be no limit and infinite recursion may be
+            possible.
+        """
+        # TODO: Use Box SDK recursive delete if applicable
+        path = self.expand_path(path, recursive=recursive, maxdepth=maxdepth)
+        for p in reversed(path):
+            if self.isdir(p):
+                if not recursive:
+                    raise ValueError("Cannot delete directory, set recursive=True")
+                self.rmdir(p, etag=etag)
+            else:
+                self.rm_file(p, etag=etag)
+
     def rm_file(self, path, etag=None):
         """Remove a file. Passes `etag` along to Box delete"""
         file_id = self.path_to_file_id(path)
@@ -374,6 +399,10 @@ class BoxFileSystem(AbstractFileSystem):
             folder_id, if_match=etag, recursive=recursive
         )
         self._remove_from_path_map(path)
+
+    def mv(self, path1, path2, recursive=False, maxdepth=None, etag=None):
+        # TODO: Use Box SDK to move files via "update"
+        super().mv(path1, path2, recursive=recursive, maxdepth=maxdepth)
 
     def ls(self, path, detail=True, refresh=_Default, **kwargs):
         if refresh is _Default:
@@ -459,17 +488,20 @@ class BoxFileSystem(AbstractFileSystem):
         dest_folder_id = self.path_to_file_id(self._parent(path2))
         version = kwargs.pop("version", None)
 
-        if self.exists(path2):
-            # Don't delete then rewrite, since Box might choose to remove version
-            # history if file gets deleted
-            raise FileExistsError(f"File at `{path2}` already exists")
+        if self.isdir(path1):
+            self.mkdirs(path2, exist_ok=True)
+        else:
+            if self.exists(path2):
+                # Don't delete then rewrite, since Box might choose to remove version
+                # history if file gets deleted
+                raise FileExistsError(f"File at `{path2}` already exists")
 
-        self.client.files.copy_file(
-            src_id,
-            CopyFileParent(id=dest_folder_id),
-            name=path2.rsplit("/", maxsplit=1)[-1],
-            version=version,
-        )
+            self.client.files.copy_file(
+                src_id,
+                CopyFileParent(id=dest_folder_id),
+                name=path2.rsplit("/", maxsplit=1)[-1],
+                version=version,
+            )
 
     def touch(self, path, truncate=False, **kwargs):
         # Don't truncate by default
