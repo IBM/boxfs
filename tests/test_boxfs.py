@@ -3,13 +3,11 @@ from __future__ import annotations
 import random
 from contextlib import nullcontext as does_not_raise
 
-import boxsdk
-import boxsdk.object.file
-import boxsdk.object.folder
-import boxsdk.object.search
+import box_sdk_gen
+from box_sdk_gen import FileOrFolderScopeScopeField
+
 import fsspec
 import pytest
-from boxsdk.auth.oauth2 import TokenScope
 from ._utilities import BoxFileSystemMocker
 
 
@@ -18,38 +16,16 @@ def test_box_protocol_registered():
     assert "box" in fsspec.available_protocols()
 
 
-@pytest.fixture(
-    scope="class",
-    params=[
-        pytest.param(None, id="no-scope"),
-        pytest.param((TokenScope.ITEM_READWRITE,), id="read-write"),
-        pytest.param((TokenScope.ITEM_READ,), id="read"),
-    ],
-)
-def scopes(request):
-    return request.param
-
-
-@pytest.fixture(scope="class")
-def write_expectation(scopes, request):
-    """Context manager to specify whether test should succeed/fail based on scope"""
-    if scopes is None or TokenScope.ITEM_READWRITE in scopes:
-        yield does_not_raise()
-    else:
-        yield pytest.raises(boxsdk.BoxAPIException, match="403")
-
-
 class TestBoxFileSystem(BoxFileSystemMocker):
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="function")
     def fs(self, client, client_type, root_id, root_path, mock_folder_get, scopes):
-        if client is not None:
-            client = client.clone()
         fs = fsspec.filesystem(
             "box",
             client=client,
             root_id=root_id,
             client_type=client_type,
-            cache_paths=False
+            cache_paths=False,
+            skip_instance_cache=True,
         )
 
         if scopes:
@@ -60,25 +36,18 @@ class TestBoxFileSystem(BoxFileSystemMocker):
                 pass
 
         yield fs
-    
-    @pytest.fixture(scope="class")
+
+    @pytest.fixture(scope="function")
     def fs_caching(
-        self,
-        client,
-        client_type,
-        root_id,
-        root_path,
-        mock_folder_get, 
-        scopes
+        self, client, client_type, root_id, root_path, mock_folder_get, scopes
     ):
-        if client is not None:
-            client = client.clone()
         fs = fsspec.filesystem(
             "box",
             client=client,
             root_id=root_id,
             client_type=client_type,
-            cache_paths=True
+            cache_paths=True,
+            skip_instance_cache=True,
         )
 
         if scopes:
@@ -90,8 +59,7 @@ class TestBoxFileSystem(BoxFileSystemMocker):
 
         yield fs
 
-
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="function")
     def write_file(self, fs, mock_upload, mock_folder_get, mock_folder_get_items):
         def _write(path):
             a, b = random.randint(0, 1e9), random.randint(0, 1e9)
@@ -99,6 +67,7 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             with fs.open(path, "wb") as f:
                 f.write(text.encode())
             return text
+
         yield _write
 
     @pytest.mark.usefixtures(
@@ -129,7 +98,7 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             for i in range(2):
                 # Use different ranges for each call to test that the file size
                 # updates correctly
-                _min, _max = i * 1e5, 10**(5 * (i+1)) - 1
+                _min, _max = i * 1e5, 10 ** (5 * (i + 1)) - 1
                 a, b = random.randint(_min, _max), random.randint(_min, _max)
                 text = f"{a} {b} DONE"
                 with fs.open(path, "wb") as f:
@@ -141,11 +110,11 @@ class TestBoxFileSystem(BoxFileSystemMocker):
         "mock_folder_get_items",
         "mock_item_delete",
     )
-    def test_box_remove(self, fs, write_expectation, write_file):
+    def test_box_remove(self, fs, delete_expectation, write_file):
         """File is deleted correctly"""
         path = "removeable_file.txt"
 
-        with write_expectation:
+        with delete_expectation:
             write_file(path)
             fs.rm(path)
 
@@ -216,13 +185,17 @@ class TestBoxFileSystem(BoxFileSystemMocker):
 
             def count_calls():
                 return (
-                    call_counter["boxsdk.object.folder.Folder.get_items"]
-                    + call_counter["boxsdk.object.file.File.get"]
+                    call_counter[
+                        "box_sdk_gen.managers.folders.FoldersManager.get_folder_items"
+                    ]
+                    + call_counter[
+                        "box_sdk_gen.managers.files.FilesManager.get_file_by_id"
+                    ]
                 )
 
             fs_caching.ls("", detail=True, refresh=True)
             calls_to_get_file = count_calls()
-            
+
             # Should already be cached from the parent ls
             fs_caching.ls(path, detail=True, refresh=False)
             assert calls_to_get_file == count_calls()
@@ -234,13 +207,13 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             # Should already be cached from the parent ls
             fs_caching.ls(path, detail=True, refresh=True)
             assert calls_to_get_file < count_calls()
-    
+
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
         "mock_file_get",
         "mock_folder_get",
         "mock_upload",
-        "mock_create_subfolder"
+        "mock_create_subfolder",
     )
     def test_box_caching_folder(self, fs, fs_caching, write_expectation, call_counter):
         outer_folder = "outer folder"
@@ -268,6 +241,10 @@ class TestBoxFileSystem(BoxFileSystemMocker):
             write_file(path)
             info = fs.info(path)
 
-            assert info['name'].endswith(path)
-            assert info['size'] > 0
-            assert info['type'] == 'file'
+            assert info["name"].endswith(path)
+            assert info["size"] > 0
+            assert info["type"] == "file"
+
+            write_file("file_info2.txt")
+            folder_info = fs.ls("/")
+            assert len(folder_info) == 2
