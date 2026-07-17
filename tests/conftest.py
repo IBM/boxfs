@@ -1,9 +1,12 @@
+from contextlib import nullcontext as does_not_raise
 import logging
 import sys
 
 import pytest
 from ._utilities import MockedClient  # noqa: F401
 
+from box_sdk_gen import FileOrFolderScopeScopeField
+import box_sdk_gen
 
 @pytest.fixture(autouse=True, scope="session")
 def logger():
@@ -68,6 +71,51 @@ def skip_real(request, do_mock):
     # Add marker to run test on only mocked API connection
     if request.node.get_closest_marker("mock_only") and not do_mock:
         pytest.skip("skipped on real API connection")
+
+
+@pytest.fixture(
+    scope="class",
+    params=[
+        pytest.param(None, id="no-scope"),
+        pytest.param(
+            (
+                FileOrFolderScopeScopeField.ITEM_UPLOAD,
+                FileOrFolderScopeScopeField.ITEM_READ,
+                FileOrFolderScopeScopeField.ITEM_DOWNLOAD,
+                FileOrFolderScopeScopeField.BASE_EXPLORER,
+                FileOrFolderScopeScopeField.BASE_UPLOAD,
+            ),
+            id="read-write",
+        ),
+        pytest.param(
+            (
+                FileOrFolderScopeScopeField.BASE_EXPLORER,
+                FileOrFolderScopeScopeField.ITEM_DOWNLOAD,
+                FileOrFolderScopeScopeField.ITEM_READ,
+            ),
+            id="read",
+        ),
+    ],
+)
+def scopes(request):
+    return request.param
+
+@pytest.fixture(scope="class")
+def write_expectation(scopes, request):
+    """Context manager to specify whether test should succeed/fail based on scope"""
+    if scopes is None or FileOrFolderScopeScopeField.ITEM_UPLOAD in scopes:
+        yield does_not_raise()
+    else:
+        yield pytest.raises(box_sdk_gen.BoxAPIError, match="403")
+
+
+@pytest.fixture(scope="class")
+def delete_expectation(scopes, request):
+    """Context manager to specify whether test should succeed/fail based on scope"""
+    if scopes is None or FileOrFolderScopeScopeField.ITEM_DELETE in scopes:
+        yield does_not_raise()
+    else:
+        yield pytest.raises(box_sdk_gen.BoxAPIError, match="403")
 
 
 @pytest.fixture(scope="module")

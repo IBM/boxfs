@@ -16,52 +16,6 @@ def test_box_protocol_registered():
     assert "box" in fsspec.available_protocols()
 
 
-@pytest.fixture(
-    scope="class",
-    params=[
-        pytest.param(None, id="no-scope"),
-        pytest.param(
-            (
-                FileOrFolderScopeScopeField.ITEM_UPLOAD,
-                FileOrFolderScopeScopeField.ITEM_READ,
-                FileOrFolderScopeScopeField.ITEM_DOWNLOAD,
-                FileOrFolderScopeScopeField.BASE_EXPLORER,
-                FileOrFolderScopeScopeField.BASE_UPLOAD,
-            ),
-            id="read-write",
-        ),
-        pytest.param(
-            (
-                FileOrFolderScopeScopeField.BASE_EXPLORER,
-                FileOrFolderScopeScopeField.ITEM_DOWNLOAD,
-                FileOrFolderScopeScopeField.ITEM_READ,
-            ),
-            id="read",
-        ),
-    ],
-)
-def scopes(request):
-    return request.param
-
-
-@pytest.fixture(scope="class")
-def write_expectation(scopes, request):
-    """Context manager to specify whether test should succeed/fail based on scope"""
-    if scopes is None or FileOrFolderScopeScopeField.ITEM_UPLOAD in scopes:
-        yield does_not_raise()
-    else:
-        yield pytest.raises(box_sdk_gen.BoxAPIError, match="403")
-
-
-@pytest.fixture(scope="class")
-def delete_expectation(scopes, request):
-    """Context manager to specify whether test should succeed/fail based on scope"""
-    if scopes is None or FileOrFolderScopeScopeField.ITEM_DELETE in scopes:
-        yield does_not_raise()
-    else:
-        yield pytest.raises(box_sdk_gen.BoxAPIError, match="403")
-
-
 class TestBoxFileSystem(BoxFileSystemMocker):
     @pytest.fixture(scope="function")
     def fs(self, client, client_type, root_id, root_path, mock_folder_get, scopes):

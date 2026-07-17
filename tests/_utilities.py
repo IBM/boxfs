@@ -1,3 +1,5 @@
+from box_sdk_gen.schemas.file_full import FileFull
+from box_sdk_gen.schemas.folder_mini import FolderMini
 from collections import defaultdict
 import copy
 import datetime
@@ -230,7 +232,7 @@ class BoxFileSystemMocker:
                         markers[next_marker] = marker_offset + 1
                     else:
                         next_marker = None
-                    entries = [entries[marker_offset]]
+                    entries: list[FileFull | FolderMini] = [entries[marker_offset]]
                 return box_sdk_gen.Items(entries=entries, next_marker=next_marker)
             elif folder_id in test.folders:
                 return box_sdk_gen.Items(entries=[])
@@ -505,6 +507,18 @@ class BoxFileSystemMocker:
 
             time = datetime.datetime.now().isoformat(timespec="seconds")
 
+            parent_info = test.folders[parent.id]
+            path = (
+                *parent_info["path_collection"]["entries"],
+                {
+                    "id": parent.id,
+                    "etag": parent_info["etag"],
+                    "type": "folder",
+                    "sequence_id": parent_info.get("sequence_id", None),
+                    "name": parent_info["name"]
+                }
+            )
+
             file: File = deserialize(
                 ItemJSON(
                     name=name,
@@ -513,6 +527,7 @@ class BoxFileSystemMocker:
                     modified_at=time,
                     _type="file",
                     size=len(test.contents[file_id]),
+                    path_collection=path
                 ),
                 File,
             )
@@ -597,6 +612,7 @@ class BoxFileSystemMocker:
                 },
             )
             folder_json["path_collection"] = path_collection
+            folder_json["parent"] = test.folders[parent.id]
             folder = deserialize(folder_json, FolderFull)
             test.mock_items[parent.id].append(folder)
             test.folders[folder_id] = folder_json
