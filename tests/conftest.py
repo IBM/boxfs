@@ -13,8 +13,8 @@ def logger():
 
 @pytest.fixture(scope="module")
 def client(do_mock, request, logger):
-    import boxsdk
-    from boxsdk import JWTAuth
+    import box_sdk_gen
+    from box_sdk_gen import JWTConfig, BoxJWTAuth
     import requests
 
     def blank_response(self, method, url, **kwargs):
@@ -32,9 +32,9 @@ def client(do_mock, request, logger):
         logger.info("running real client")
         api_config = request.config.getoption("api_config")
         if api_config is not None:
-            config = JWTAuth.from_settings_file(api_config)
-
-            client = boxsdk.LoggingClient(config)
+            config = JWTConfig.from_config_file(api_config)
+            auth = BoxJWTAuth(config)
+            client = box_sdk_gen.BoxClient(auth)
         else:
             client = None
 
@@ -43,8 +43,9 @@ def client(do_mock, request, logger):
 
 @pytest.fixture(scope="module")
 def client_type():
-    import boxsdk
-    return boxsdk.LoggingClient
+    import box_sdk_gen
+
+    return box_sdk_gen.BoxClient
 
 
 @pytest.fixture(
@@ -96,29 +97,35 @@ BOX_CODES = {
 
 @pytest.fixture(scope="session")
 def box_error():
-    import boxsdk
+    import box_sdk_gen
 
     def _error(code, **kwargs):
         error_details = BOX_CODES[code]
-        return boxsdk.BoxAPIException(
-            status=error_details["status"],
-            headers=None,
-            code=code,
+        return box_sdk_gen.BoxAPIError(
+            request_info=box_sdk_gen.RequestInfo(
+                method="",
+                url="",
+                query_params={},
+                headers={}
+            ),
+            response_info=box_sdk_gen.ResponseInfo(
+                status_code=error_details["status"],
+                headers={},
+                body=error_details["message"],
+                code=code,
+                context_info={
+                    "errors": [
+                        {
+                            "reason": error_details["reason"],
+                            "name": kwargs.get("_type", ""),
+                            "message": error_details["error_message"].format(**kwargs),
+                        }
+                    ]
+                },
+            ),
             message=error_details["message"],
-            request_id=None,
-            url=None,
-            method=None,
-            context_info={
-                "errors": [
-                    {
-                        "reason": error_details["reason"],
-                        "name": kwargs.get("_type", ""),
-                        "message": error_details["error_message"].format(**kwargs),
-                    }
-                ]
-            },
-            network_response=None,
         )
+
     yield _error
 
 
@@ -148,7 +155,7 @@ def pytest_addoption(parser):
         dest="box_root_path",
         help=(
             'path of Box root folder, relative to "All Files" (optional if box_root_id '
-            'specified)'
+            "specified)"
         ),
     )
 

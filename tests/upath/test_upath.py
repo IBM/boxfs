@@ -5,31 +5,68 @@ import pytest
 import upath
 
 from .._utilities import BoxFileSystemMocker
-import boxfs  # noqa: F401
+import box_sdk_gen
 
 
 @pytest.mark.mock_only
 def test_box_protocol_registered():
+    import upath.registry
     assert "box" in upath.registry.available_implementations()
 
 
 @pytest.fixture(
-    scope="class",
+    scope="module",
 )
 def scopes(request):
     return None
 
 
 class TestBoxUPath(BoxFileSystemMocker):
-
-    @pytest.fixture(scope="class")
-    def test_path(
+    @pytest.fixture(scope="class", autouse=True)
+    def setup_path_real_api(
         self,
         client,
         client_type,
         root_id,
+        do_mock
+    ):
+        # Due to this fixture's scope, it will execute before create_subfolder is mocked
+        # and will only execute once for live API testing
+        if do_mock:
+            yield None
+            return
+
+        if root_id is None:
+            root_id = "0"
+        if client is None:
+            import fsspec
+
+            client = fsspec.filesystem("box", client_type=client_type).client
+
+        folder = None
+        path_exists = False
+        try:
+            folder = client.folders.create_folder(
+                "Test UPath Folder", box_sdk_gen.CreateFolderParent(root_id)
+            )
+        except box_sdk_gen.BoxAPIError as error:
+            if error.response_info.status_code == 409:
+                path_exists = True
+
+        yield folder
+
+        if folder is not None and not path_exists:
+            client.folders.delete_folder_by_id(folder.id)
+
+    @pytest.fixture(scope="function", autouse=True)
+    def test_path(
+        self,
+        client: box_sdk_gen.BoxClient | None,
+        client_type,
+        root_id,
         root_path,
         scopes,
+        do_mock,
         mock_folder_get,
         mock_create_subfolder,
     ):
@@ -37,16 +74,24 @@ class TestBoxUPath(BoxFileSystemMocker):
             root_id = "0"
         if client is None:
             import fsspec
+
             client = fsspec.filesystem("box", client_type=client_type).client
-        client.folder(root_id).create_subfolder("Test UPath Folder")
-        yield upath.UPath(
+        if do_mock:
+            client.folders.create_folder(
+                "Test UPath Folder", box_sdk_gen.CreateFolderParent(root_id)
+            )
+        path = upath.UPath(
             "box:///Test UPath Folder",
             client=client,
             root_id=root_id,
             root_path=root_path,
-            scopes=scopes
+            scopes=scopes,
+            # Caching paths during mock can lead to race conditions between
+            # test functions, since we don't mock unique item IDs
+            cache_paths=False,
         )
-    
+        yield path
+
     def test_fspath(self, test_path):
         sub_path = test_path / "Subfolder"
         sub_path_url = str(sub_path)
@@ -54,6 +99,7 @@ class TestBoxUPath(BoxFileSystemMocker):
         assert sub_path_url == "box:///Test UPath Folder/Subfolder"
 
         import boxfs._upath
+
         assert type(test_path) is boxfs._upath.BoxPath
 
     @pytest.mark.usefixtures(
@@ -77,7 +123,7 @@ class TestBoxUPath(BoxFileSystemMocker):
             read_text = f.read()
 
         assert read_text == text
-    
+
     @pytest.mark.usefixtures(
         "mock_folder_get_items",
         "mock_folder_get",

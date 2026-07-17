@@ -1,23 +1,36 @@
 """
 boxfs - A fsspec implementation for Box file storage platform
 """
+
 from __future__ import annotations
 
 import contextlib
 import hashlib
 import logging
 import tempfile
-from typing import (
-    Iterable,
-    Mapping,
-    Optional,
-    Type
-)
+from typing import Iterable, Mapping, Optional, Type, Any
 import warnings
 
-from boxsdk import BoxAPIException, Client, OAuth2, JWTAuth
-from boxsdk.auth.oauth2 import TokenScope
-from boxsdk.object.item import Item
+from box_sdk_gen import (
+    BoxClient,
+    FilePathCollectionField,
+    FolderMini,
+    FolderPathCollectionField,
+    JWTConfig,
+    BoxJWTAuth,
+    BoxAPIError,
+    BoxDeveloperTokenAuth,
+    CreateFolderParent,
+    FileFull,
+    FolderFull,
+    CopyFileParent,
+    UploadFileAttributes,
+    UploadFileAttributesParentField,
+    BoxOAuth,
+    FileOrFolderScopeScopeField,
+    WebLink,
+)
+
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 
 try:
@@ -46,10 +59,8 @@ class BoxFileSystem(AbstractFileSystem):
     root_marker = "/"
     root_id = "0"
     _default_root_id = "0"
-    
-    default_options = {
-        "refresh": False
-    }
+
+    default_options = {"refresh": False}
 
     # fmt: off
     _fields = [
@@ -60,29 +71,29 @@ class BoxFileSystem(AbstractFileSystem):
 
     def __init__(
         self,
-        client: Optional[Client] = None,
-        oauth: Optional[OAuth2 | _PathLike] = None,
-        client_type: Type[Client] = Client,
+        client: Optional[BoxClient] = None,
+        oauth: Optional[BoxOAuth | _PathLike] = None,
+        client_type: Type[BoxClient] = BoxClient,
         root_id: _ObjectId = None,
         root_path: _PathLike = None,
-        path_map: Optional[Mapping[_PathLike, _ObjectId]] = None,
-        scopes: Optional[Iterable[TokenScope]] = None,
+        path_map: Optional[dict[_PathLike, FileFull]] = None,
+        scopes: Optional[Iterable[FileOrFolderScopeScopeField]] = None,
         cache_paths: bool = True,
         **kwargs,
     ):
         """Instantiate BoxFileSystem
 
-        Creates a BoxFileSystem using the boxsdk interface
+        Creates a BoxFileSystem using the box_sdk_gen interface
 
         Parameters
         ----------
-        oauth : OAuth2 or str, optional
-            Box app OAuth2 configuration or path to configuration file, which is
+        oauth : BoxOAuth or str, optional
+            Box app BoxOAuth or path to configuration file, which is
             passed to `JWTAuth.from_settings_file`, by default None
-        client : Client, optional
-            Instantiated boxsdk client
-        client_type : Type[Client]
-            Type of `Client` class to use when connecting to box
+        client : BoxClient, optional
+            Instantiated box_sdk_gen client
+        client_type : Type[BoxClient]
+            Type of `BoxClient` class to use when connecting to box
 
         If `client` is provided, it is used for handling API calls. Otherwise, the file
         system to instantiate a new client connection, of type `client_type`, using the
@@ -102,7 +113,7 @@ class BoxFileSystem(AbstractFileSystem):
         path_map : Mapping[path string -> object dict], optional
             Mapping of paths to object dicts, used to populate initial lookup cache
             for quick directory navigation
-        scopes : Iterable[TokenScope], optional
+        scopes : Iterable[FileOrFolderScopeScopeField], optional
             List of permissions to which the API token should be restricted. If None
             (default), no restrictions are applied. If scopes are provided, the client
             connection is (1) downscoped to use only the provided scopes, and
@@ -114,15 +125,16 @@ class BoxFileSystem(AbstractFileSystem):
         super().__init__(**kwargs)
         if path_map is None:
             path_map = {}
-        self.path_map = path_map
+        self.path_map: dict[_PathLike, FileFull] = path_map
         if client is None:
             if isinstance(oauth, str):
-                oauth = JWTAuth.from_settings_file(oauth)
+                config = JWTConfig.from_config_file(oauth)
+                oauth = BoxJWTAuth(config)
             self.connect(oauth, client_type)
         else:
-            self.client = client.clone()
-        self.root_id = self._get_root_id(root_id, root_path)
-        self.root_path = self._get_root_path(self.root_id)
+            self.client = client
+        self.root_id: _ObjectId = self._get_root_id(root_id, root_path)
+        self.root_path: _PathLike = self._get_root_path(self.root_id)
 
         self._original_client = self.client
         self.scopes = scopes
@@ -136,8 +148,8 @@ class BoxFileSystem(AbstractFileSystem):
             if option in kwargs:
                 self.default_options[option] = kwargs[option]
 
-    def connect(self, config, client_type):
-        self.client: Client = client_type(config)
+    def connect(self, auth, client_type):
+        self.client: BoxClient = client_type(auth)
 
     def _get_root_id(self, root_id: _ObjectId = None, root_path: _PathLike = None):
         """Gets the root folder ID
@@ -164,36 +176,38 @@ class BoxFileSystem(AbstractFileSystem):
         return root_id
 
     def _get_root_path(self, root_id):
-        folder = self.client.folder(root_id).get(fields=["name", "path_collection"])
+        folder = self.client.folders.get_folder_by_id(
+            root_id, fields=["name", "path_collection"]
+        )
         return self._construct_path(folder, relative=False)
 
-    def downscope_token(self, scopes: Iterable[TokenScope]):
+    def downscope_token(self, scopes: Iterable[FileOrFolderScopeScopeField]):
         """Downscope permissions for the underlying client
 
         Parameters
         ----------
-        scopes : Iterable[boxsdk.auth.oath2.TokenScope]
+        scopes : Iterable[box_sdk_gen.FileOrFolderScopeScopeField]
             List of scopes to allow
         """
-        downscoped_token = self._original_client.downscope_token(
+        url = "".join(
+            [
+                self.client.network_session.base_urls.base_url,
+                "/2.0/folders/",
+                str(self.root_id),
+            ]
+        )
+        downscoped_token = self._original_client.auth.downscope_token(
             scopes=scopes,
-            item=self._original_client.folder(self.root_id),
+            resource=url,
         )
-        self.client = self._original_client.__class__(
-            oauth=OAuth2(
-                client_id=None,
-                client_secret=None,
-                access_token=downscoped_token.access_token,
-            )
-        )
+        auth = BoxDeveloperTokenAuth(token=downscoped_token.access_token)
+        self.client = self._original_client.__class__(auth=auth)
         # The root path changes after downscoping, because the "All Files" folder
         # is hidden
         self.root_path = self._get_root_path(self.root_id)
 
     def refresh_token(self):
-        self._original_client = self._original_client.auth.refresh(
-            self._original_client.auth.access_token
-        )
+        self._original_client = self._original_client.auth.refresh_token()
         if self.scopes:
             self.downscope_token(self.scopes)
 
@@ -226,12 +240,12 @@ class BoxFileSystem(AbstractFileSystem):
         return self.seek_closest_known_path(parent)
 
     def _get_absolute_path_id(self, path: str):
-        _closest = self.client.folder(self._default_root_id)
-
         try:
-            _closest = _closest.get(fields=self._fields)
-        except BoxAPIException as error:
-            if error.status == 403:
+            _closest = self.client.folders.get_folder_by_id(
+                self._default_root_id, fields=self._fields
+            )
+        except BoxAPIError as error:
+            if error.response_info.status_code == 403:
                 raise PermissionError("Could not access user root folder ('All Files')")
             else:
                 raise
@@ -241,8 +255,10 @@ class BoxFileSystem(AbstractFileSystem):
         try:
             for part in path.split("/"):
                 error = True
-                items = _closest.get_items(fields=self._fields)
-                for item in items:
+                items = self.client.folders.get_folder_items(
+                    _closest.id, fields=self._fields
+                )
+                for item in items.entries:
                     item_path = "/".join((_closest_path, part))
                     if item.type in ("folder", "file") and item.name == part:
                         _closest = item
@@ -251,14 +267,14 @@ class BoxFileSystem(AbstractFileSystem):
                         break
                 if error:
                     raise FileNotFoundError("Could not find folder in Box Drive")
-        except BoxAPIException as error:
-            if error.status == 401:
-                self.refresh()
+        except BoxAPIError as error:
+            if error.response_info.status_code == 401:
+                self.refresh_token()
                 return self._get_absolute_path_id(path)
             else:
                 raise FileNotFoundError("Could not find folder in Box Drive")
 
-        object_id = _closest.object_id
+        object_id = _closest.id
         return str(object_id)
 
     def _get_relative_path_id(self, path: str, root_id=None):
@@ -270,7 +286,7 @@ class BoxFileSystem(AbstractFileSystem):
             return self.path_map[path].id
 
         _closest_id = self.seek_closest_known_path(path)
-        _closest = self.client.folder(_closest_id)
+        _closest = self.client.folders.get_folder_by_id(_closest_id)
         _closest_path = self._construct_path(_closest)
         remaining_path = path.replace(_closest_path, "", 1)
         if remaining_path == "":
@@ -278,8 +294,12 @@ class BoxFileSystem(AbstractFileSystem):
         try:
             for part in remaining_path.lstrip("/").split("/"):
                 error = True
-                items = _closest.get_items(fields=self._fields)
-                for item in items:
+                items = self.client.folders.get_folder_items(
+                    _closest.id, fields=self._fields
+                )
+                if not items.entries:
+                    raise FileNotFoundError("Could not find folder in Box Drive")
+                for item in items.entries:
                     item_path = "/".join((_closest_path, item.name))
                     self._add_to_path_map(item_path, item)
                     if item.type in ("folder", "file") and item.name == part:
@@ -289,14 +309,14 @@ class BoxFileSystem(AbstractFileSystem):
                         break
                 if error:
                     raise FileNotFoundError("Could not find folder in Box Drive")
-        except BoxAPIException as error:
-            if error.status == 401:
-                self.refresh()
+        except BoxAPIError as error:
+            if error.response_info.status_code == 401:
+                self.refresh_token()
                 return self._get_relative_path_id(path)
             else:
                 raise FileNotFoundError("Could not find folder in Box Drive")
 
-        object_id = _closest.object_id
+        object_id = _closest.id
 
         return str(object_id)
 
@@ -320,7 +340,9 @@ class BoxFileSystem(AbstractFileSystem):
                 raise FileNotFoundError(f"Path `{parent}` does not exist")
 
         parent_id = self.path_to_file_id(parent)
-        self.client.folder(parent_id).create_subfolder(path.rsplit("/", maxsplit=1)[-1])
+        self.client.folders.create_folder(
+            path.rsplit("/", maxsplit=1)[-1], CreateFolderParent(parent_id)
+        )
 
     def makedirs(self, path, exist_ok=False):
         if self.exists(path):
@@ -343,12 +365,21 @@ class BoxFileSystem(AbstractFileSystem):
     def rm_file(self, path, etag=None):
         """Remove a file. Passes `etag` along to Box delete"""
         file_id = self.path_to_file_id(path)
-        self.client.file(file_id).delete(etag=etag)
+        try:
+            self.client.files.delete_file_by_id(file_id, if_match=etag)
+        except BoxAPIError as error:
+            if error.response_info.status_code == 404:
+                # File not found, possibly already deleted
+                pass
+            else:
+                raise error
         self._remove_from_path_map(path)
 
-    def rmdir(self, path, recursive: bool = True, etag: str | None = None):
+    def rmdir(self, path, recursive: bool = False, etag: str | None = None):
         folder_id = self.path_to_file_id(path)
-        self.client.folder(folder_id).delete(etag=etag)
+        self.client.folders.delete_folder_by_id(
+            folder_id, if_match=etag, recursive=recursive
+        )
         self._remove_from_path_map(path)
 
     def ls(self, path, detail=True, refresh=_Default, **kwargs):
@@ -358,47 +389,57 @@ class BoxFileSystem(AbstractFileSystem):
 
         object_id = self.path_to_file_id(path)
         cache_path = path.rstrip("/") if path != "/" else path
-        items = None
+        items: Optional[list[FileFull | FolderMini | WebLink]] = None
+        fsspec_items: list[dict[str, Any]] = []
         _dircached = False
 
         if not refresh:
             try:
-                items = self._ls_from_cache(cache_path)
-                # Check that the cache didn't return a self folder instead of
-                # the children items, which happens if the parent folder is
-                # cached but the path folder is not
-                did_return_self = (
-                    (items is not None)
-                    and (len(items) == 1)
-                    and (items[0]["name"] == path.rstrip("/"))
-                    and (items[0]["type"] == "directory")
-                )
-                _dircached = (items is not None) and not did_return_self
+                _from_cache = self._ls_from_cache(cache_path)
+                if _from_cache is not None:
+                    fsspec_items: list[dict[str, Any]] = _from_cache
+                    # Check that the cache didn't return a self folder instead of
+                    # the children items, which happens if the parent folder is
+                    # cached but the path folder is not
+                    did_return_self = (
+                        (fsspec_items is not None)
+                        and (len(fsspec_items) == 1)
+                        and (fsspec_items[0]["name"] == path.rstrip("/"))
+                        and (fsspec_items[0]["type"] == "directory")
+                    )
+                    _dircached = (fsspec_items is not None) and not did_return_self
             except FileNotFoundError:
                 # Not in cache, so try to retrieve normally
                 pass
 
-        if refresh or not _dircached:
+        if not _dircached:
+            marker = None
+            items = []
             try:
-                # _object = self.client.folder(object_id).get()
-                items = list(
-                    self.client.folder(object_id).get_items(fields=self._fields)
-                )
-            except BoxAPIException as error:
-                if error.status == 401:
-                    self.refresh()
+                while True:
+                    folder_items = self.client.folders.get_folder_items(
+                        object_id, fields=self._fields, marker=marker, usemarker=True
+                    )
+                    if folder_items.entries:
+                        items.extend(folder_items.entries)
+                    marker = folder_items.next_marker
+                    if marker is None or marker == "null" or marker == "":
+                        break
+            except BoxAPIError as error:
+                if error.response_info.status_code == 401:
+                    self.refresh_token()
                     return self.ls(path, detail=detail)
+                elif error.response_info.status_code in (403, 404, 405):
+                    # item is a file, not a folder
+                    items = [self.client.files.get_file_by_id(object_id, fields=self._fields)]
+                else:
+                    raise error
 
-        if items is None:
-            # item is a file, not a folder
-            items = [self.client.file(object_id).get(fields=self._fields)]
-
-        if _dircached:
-            fsspec_items = items
-        else:
             # Need to convert Box API response to fsspec response dictionary
             fsspec_items = []
             for item in items:
+                if isinstance(item, WebLink):
+                    continue
                 item_path = self._construct_path(item, relative=True)
                 fsspec_items.append(
                     {
@@ -408,6 +449,7 @@ class BoxFileSystem(AbstractFileSystem):
                         "id": item.id,
                         "modified_at": item.modified_at,
                         "created_at": item.created_at,
+                        "etag": item.etag,
                     }
                 )
                 self._add_to_path_map(item_path, item)
@@ -429,8 +471,9 @@ class BoxFileSystem(AbstractFileSystem):
             # history if file gets deleted
             raise FileExistsError(f"File at `{path2}` already exists")
 
-        self.client.file(src_id).copy(
-            parent_folder=self.client.folder(dest_folder_id),
+        self.client.files.copy_file(
+            src_id,
+            CopyFileParent(id=dest_folder_id),
             name=path2.rsplit("/", maxsplit=1)[-1],
             version=version,
         )
@@ -453,14 +496,30 @@ class BoxFileSystem(AbstractFileSystem):
 
     def sign(self, path, expiration=100, **kwargs):
         file_id = self.path_to_file_id(path)
-        return self.client.file(file_id).get_download_url()
+        return self.client.downloads.get_download_file_url(file_id)
 
-    def _construct_path(self, item: Item, relative=True):
+    def _construct_path(self, item: FileFull | FolderMini, relative=True):
         if not hasattr(item, "path_collection"):
-            item = item.get(fields=["name", "path_collection"])
+            if item.type == "folder":
+                item = self.client.folders.get_folder_by_id(item.id, fields=["name", "path_collection"])
+            else:
+                item = self.client.files.get_file_by_id(item.id, fields=["name", "path_collection"])
+            path_collection = item.path_collection
+        else:
+            path_collection = getattr(item, "path_collection")
+
         path_parts = []
-        for path_part in item.path_collection["entries"]:
-            path_parts.append(path_part["name"])
+        path_entries: list[FolderMini]
+        # Seems like a bug in box_sdk_gen, where getting folder items with "fields"
+        # doesn't deserialize into the appropriate types, instead returning a dict
+        if hasattr(path_collection, "entries"):
+            path_entries = getattr(path_collection, "entries", [])
+        else:
+            path_entries = path_collection.get("entries")
+
+        for path_part in path_entries:
+            name = getattr(path_part, "name", None) or path_part.get("name")
+            path_parts.append(name)
         path = "/".join((*path_parts, item.name))
 
         if relative:
@@ -470,7 +529,7 @@ class BoxFileSystem(AbstractFileSystem):
 
     def _open(self, *args, **kwargs):
         return BoxFile(self, *args, **kwargs)
-    
+
     @contextlib.contextmanager
     def option_context(self, *args, **kwargs):
         original_kwargs = {}
@@ -486,6 +545,8 @@ class BoxFileSystem(AbstractFileSystem):
 
 
 class BoxFile(AbstractBufferedFile):
+    fs: BoxFileSystem
+
     def __init__(
         self,
         fs: BoxFileSystem,
@@ -507,9 +568,10 @@ class BoxFile(AbstractBufferedFile):
             cache_type=cache_type,
             cache_options=cache_options,
             size=size,
-            **kwargs
+            **kwargs,
         )
         self.exists = False
+        self.etag = None
 
         if self.writable():
             self.location = None
@@ -529,6 +591,9 @@ class BoxFile(AbstractBufferedFile):
                 self.file_id = fs.path_to_file_id(path)
             self.exists = True
 
+        if self.exists:
+            self.etag = self.details["etag"]
+
     def close(self):
         # Writeable needs to checked called before super().close()
         _writable = self.writable()
@@ -537,47 +602,52 @@ class BoxFile(AbstractBufferedFile):
             self._upload_full_file()
             self._temp_file.close()
 
+    def _initiate_upload(self):
+        # Don't actually initiate the Box upload, we need the full file size for that
+        # Instead, create a temp file and start writing to it
+        self._temp_file = tempfile.SpooledTemporaryFile(self.blocksize * 10)
+        self._sha1 = hashlib.sha1()
+
     def _upload_full_file(self, exist_ok=True):
         if self.exists and not exist_ok:
             raise FileExistsError(
                 "File already exists. Specify `exist_ok=True` to overwrite"
             )
 
-        if not self.exists:
-            _object = self.fs.client.folder(self.folder_id)
-        else:
-            _object = self.fs.client.file(self.file_id)
-
+        self._temp_file.seek(0)
         if self.offset > self.blocksize * 10:
-            # force to disk
-            self._temp_file.rollover()
             # chunked upload
-            uploader = _object.get_chunked_uploader(
-                file_path=self._temp_file.name, file_name=self.name
-            )
-            uploaded_file = uploader.start()
-        else:
-            if not self.exists:
-                upload = _object.upload_stream
-            else:
-                upload = _object.update_contents_with_stream
-
-            self._temp_file._file.seek(0)
-            uploaded_file = upload(
-                file_stream=self._temp_file._file,
+            uploaded_file = self.fs.client.chunked_uploads.upload_big_file(
+                file=self._temp_file,
+                parent_folder_id=self.folder_id,
+                # TODO: Need to double check that this is the file size
+                file_size=self.offset,
                 file_name=self.name,
-                sha1=self._sha1.hexdigest(),
             )
+        else:
+            file_attributes = UploadFileAttributes(
+                name=self.name,
+                parent=UploadFileAttributesParentField(self.folder_id),
+            )
+            if not self.exists:
+                upload_response = self.fs.client.uploads.upload_file(
+                    file_attributes,
+                    self._temp_file,
+                    content_md_5=self._sha1.hexdigest(),
+                )
+            else:
+                upload_response = self.fs.client.uploads.upload_file_version(
+                    self.file_id,
+                    file_attributes,
+                    self._temp_file,
+                    content_md_5=self._sha1.hexdigest(),
+                    if_match=self.etag,
+                )
+            uploaded_file = upload_response.entries[0]
         logger.info(
             f'File "{uploaded_file.name}" uploaded to Box with file ID '
-            f'{uploaded_file.id}'
+            f"{uploaded_file.id}"
         )
-
-    def _initiate_upload(self):
-        # Don't actually initiate the Box upload, we need the full file size for that
-        # Instead, create a temp file and start writing to it
-        self._temp_file = tempfile.SpooledTemporaryFile(self.blocksize * 10)
-        self._sha1 = hashlib.sha1()
 
     def _upload_chunk(self, final=False):
         """
@@ -590,7 +660,7 @@ class BoxFile(AbstractBufferedFile):
         self._temp_file.write(data)
 
     def _fetch_range(self, start, end):
-        kwargs = {}
+        range = None
         if start is not None or end is not None:
-            kwargs["byte_range"] = (start, end)
-        return self.fs.client.file(self.file_id).content(**kwargs)
+            range = f"bytes={start}-{end}"
+        return self.fs.client.downloads.download_file(self.file_id, range=range).read()
