@@ -619,6 +619,12 @@ class BoxFile(AbstractBufferedFile):
         if self.exists:
             self.etag = self.details["etag"]
 
+    @property
+    def details(self):
+        if self._details is None:
+            self._details = self.fs.info(self.path)
+        return self._details
+
     def close(self):
         # Writeable needs to checked called before super().close()
         _writable = self.writable()
